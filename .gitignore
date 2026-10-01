@@ -1,0 +1,44 @@
+# Visual Studio local settings and caches
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.db-shm
+*.VC.db-wal
+*.VC.opendb
+ipch/
+
+# Build output (keep dependencies/**/Lib/x64 SDK libraries)
+[Dd]ebug/
+[Rr]elease/
+/tests/bin/
+/tests/obj/
+*.obj
+*.pch
+*.pdb
+*.idb
+*.ilk
+*.res
+*.tlog/
+*.lastbuildstate
+*.exe.recipe
+
+# Generated protocol test data and received files
+protocol-test-files-*/
+Received/
+
+# Local installers, downloaded SDK archives, and machine backups
+/dependencies/vs_Setup.exe
+/dependencies/npcap-sdk-*.zip
+/hosts-backup-*.txt
+
+# Editor backups and Windows metadata
+*~
+*.swp
+*.swo
+Thumbs.db
+Desktop.ini
+
+# Keep Npcap SDK headers/libraries and Wireshark captures versioned.
