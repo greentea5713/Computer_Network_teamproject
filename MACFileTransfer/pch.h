@@ -1,0 +1,19 @@
+﻿#pragma once
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include "framework.h"
+#include <array>
+#include <vector>
+#include <string>
+#include <map>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <atomic>
+#include <functional>
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <stdexcept>
