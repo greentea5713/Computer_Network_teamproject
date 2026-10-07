@@ -8,6 +8,8 @@ struct NetworkAdapter {
     std::wstring description;
     MacAddress mac{};
     bool hasMac = false;
+    IpAddress ip{};
+    bool hasIp = false;
 };
 
 class CNILayer : public CBaseLayer {

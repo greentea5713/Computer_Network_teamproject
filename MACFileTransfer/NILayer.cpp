@@ -8,7 +8,8 @@ constexpr ULONG kOidCurrentEthernetAddress = 0x01010102;
 constexpr int kCaptureSnapshotLength = 65'536;
 constexpr int kReadTimeoutMs = 100;
 constexpr size_t kMaximumFrameSizeWithoutFcs = Wire::EthernetHeader + Wire::MTU;
-constexpr char kProtocolFilter[] = "ether proto 0x2080 or ether proto 0x2090";
+constexpr char kProtocolFilter[] =
+    "ether proto 0x2080 or ether proto 0x2090 or ether proto 0x0806";
 }  // namespace
 
 std::vector<NetworkAdapter> CNILayer::Enumerate() {
@@ -26,6 +27,17 @@ std::vector<NetworkAdapter> CNILayer::Enumerate() {
         networkAdapter.name = device->name;
         networkAdapter.description =
             Wire::Wide(device->description ? device->description : device->name);
+
+        // 어댑터에 설정된 첫 IPv4 주소를 기본 IP로 제안한다.
+        for (pcap_addr_t* address = device->addresses; address != nullptr; address = address->next) {
+            if (address->addr != nullptr && address->addr->sa_family == AF_INET) {
+                const auto* ipv4 = reinterpret_cast<const sockaddr_in*>(address->addr);
+                const auto* bytes = reinterpret_cast<const unsigned char*>(&ipv4->sin_addr);
+                std::copy(bytes, bytes + 4, networkAdapter.ip.begin());
+                networkAdapter.hasIp = true;
+                break;
+            }
+        }
 
         // Packet Driver API의 OID_802_3_CURRENT_ADDRESS로 실제 MAC 주소를 조회한다.
         LPADAPTER packetAdapter =

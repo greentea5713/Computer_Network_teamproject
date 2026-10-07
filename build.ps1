@@ -6,8 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (!(Test-Path $vswhere)) { throw 'Install Visual Studio 2022 with Desktop development with C++ and MFC.' }
-$vs = & $vswhere -latest -version '[17.0,18.0)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-if (!$vs) { throw 'Visual Studio 2022 C++ build tools were not found.' }
+$vs = & $vswhere -latest -prerelease -version '[17.0,19.0)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+if (!$vs) { throw 'Visual Studio 2022 or later C++ build tools were not found.' }
 if (!(Get-ChildItem "$vs\VC\Tools\MSVC\*\atlmfc\include\afxwin.h" -ErrorAction SilentlyContinue)) {
     throw 'MFC is missing. In Visual Studio Installer, add C++ MFC for v143 build tools (x86 & x64).'
 }

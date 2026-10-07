@@ -48,6 +48,8 @@
     <ClInclude Include="ChatAppLayer.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="ARPLayer.h"><Filter>헤더 파일</Filter></ClInclude>
+    <ClInclude Include="IPLayer.h"><Filter>헤더 파일</Filter></ClInclude>
     <ClInclude Include="EthernetLayer.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -76,6 +78,7 @@
     <ClCompile Include="ChatAppLayer.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="ARPLayer.cpp"><Filter>소스 파일</Filter></ClCompile>
     <ClCompile Include="EthernetLayer.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>

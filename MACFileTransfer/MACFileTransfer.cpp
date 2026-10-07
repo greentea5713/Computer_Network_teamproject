@@ -20,7 +20,7 @@ CMACFileTransferApp theApp;
 BOOL CMACFileTransferApp::InitInstance() {
     INITCOMMONCONTROLSEX commonControls{};
     commonControls.dwSize = sizeof(commonControls);
-    commonControls.dwICC = ICC_WIN95_CLASSES | ICC_PROGRESS_CLASS;
+    commonControls.dwICC = ICC_WIN95_CLASSES | ICC_PROGRESS_CLASS | ICC_INTERNET_CLASSES;
     InitCommonControlsEx(&commonControls);
 
     CWinApp::InitInstance();

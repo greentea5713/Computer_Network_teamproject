@@ -78,6 +78,48 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 - 파일 생성은 CREATE_NEW, 경로문자 제거, 고유 이름, `.part` 저장 후 완료 시 이름 변경으로 처리합니다. 첫 메타데이터를 받으면 전체 파일 크기로 공간을 확보하고 포인터를 처음으로 되돌린 뒤 조각을 기록합니다. 실패·취소 파일은 삭제합니다.
 - 802.1Q VLAN, 무선 모니터 모드, 라우터를 거치는 IP 통신은 대상으로 하지 않습니다.
 
+## ARP (Practice 6)
+
+### 계층 구조
+
+```
+            Application (Dialog)
+                   |
+ChatApp  FileApp  ARP   IP   ← IP는 주소 해석을 ARP에 요청
+   \       |      |    /
+          Ethernet          ← EtherType 분기: 0x2080 / 0x2090 / 0x0806 / 0x0800
+             |
+             NI
+```
+
+- `NILayer`, `EthernetLayer`, `BaseLayer`, `LayerManager`는 그대로 재사용하고, `ARPLayer`(`ARPLayer.h/.cpp`)와 `IPLayer`(`IPLayer.h`)를 새로 추가했습니다.
+- 연결 문자열: `NI ( *Ethernet ( *ChatApp ( +ChatDlg ) *FileApp ( +ChatDlg ) *ARP *IP ( +ChatDlg ) ) )`
+- `EthernetLayer`는 Frame Type 0x0806을 ARP 레이어로 올립니다. 목적지가 `ff:ff:ff:ff:ff:ff`인 브로드캐스트는 ARP 프레임만 받습니다. 채팅/파일은 기존처럼 자기 MAC 목적지만 받습니다.
+- ARP 요청/응답은 목적지 MAC을 지정하는 `SendPacket(data, len, type, destination)`으로 보냅니다.
+- NI 캡처 필터에 `ether proto 0x0806`을 추가했습니다.
+- `IPLayer`는 이번 실습에서 자기 IP를 보관하고 `Request`/`Resolve`로 ARP에 주소 해석을 요청합니다. IP 데이터그램 송수신은 라우팅 실습에서 확장합니다.
+
+### ARP 메시지와 동작
+
+- 28바이트: hard type 1 / prot type 0x0800 / hard size 6 / prot size 4 / op (1 요청, 2 응답) / sender MAC·IP / target MAC·IP. Ethernet 최소 길이 60바이트로 패딩합니다.
+- 요청: 목적지 MAC 브로드캐스트, target MAC은 0으로 채움. 캐시에 없으면 Incomplete 항목을 만듭니다.
+- 요청 수신: target IP가 내 IP이면 송신자를 캐시에 추가/갱신하고 sender/target을 바꿔(SWAPPING) 송신자에게 유니캐스트로 응답합니다. 내 IP가 아니면 응답하지 않습니다. 캐시에 이미 있는 송신자만 갱신합니다(RFC 826 merge).
+- 응답 수신: 송신자 매핑을 Complete로 추가/갱신합니다.
+- 캐시 만료: Complete 20분, Incomplete 3분. NI 수신 스레드의 `OnIdle`과 UI 1초 타이머에서 정리합니다.
+- 송신자 IP가 내 IP인데 MAC이 다르면 "IP 주소 충돌"을 표시합니다.
+
+### 실행 (Host A ↔ Host B)
+
+1. 두 PC에서 어댑터를 선택합니다. MAC과 내 IP가 어댑터 값으로 채워지며 IP는 수정할 수 있습니다(예: A `168.188.129.63`, B `168.188.129.2`). **주소 설정**을 누릅니다. 목적지 MAC은 비워 두어도 됩니다.
+2. Host A의 ARP Cache 영역에 B의 IP를 입력하고 **Send**(또는 Enter)를 누릅니다. A의 캐시에 `Incomplete` 항목이 생깁니다.
+3. Host B는 요청을 받아 A를 캐시에 추가하고 응답합니다. A의 항목이 `Complete`와 B의 MAC으로 바뀝니다.
+4. **Item Delete**/**All Delete**로 캐시를 삭제합니다. 캐시 항목을 더블클릭하면 채팅/파일 목적지 MAC에 입력됩니다.
+5. Wireshark 표시 필터: `arp`.
+
+- PC의 실제 IP를 내 IP로 쓰면 Windows도 같은 요청에 응답하여 응답이 두 개 보일 수 있습니다. 실습 토폴로지처럼 사용하지 않는 IP를 지정하면 이 프로그램만 응답합니다.
+- 프로토콜 검사(`build.ps1 -Test`)에 ARP 요청/응답 필드, 브로드캐스트 수신, SWAPPING, 캐시 추가·갱신·만료·삭제 검사를 추가했습니다. 2026-10-07 Debug x86 빌드와 검사 **617개 통과**를 확인했습니다. 실제 두 PC 사이의 ARP 교환은 아직 실행하지 않았습니다.
+- `build.ps1`은 Visual Studio 2022 이상(18 Insiders 포함)의 v143 도구를 찾습니다.
+
 ## 보고서 제출 전
 
 조원/학번, 실제 실습 일시·장소를 채우고 프로그램 결과 화면 및 Wireshark 캡처를 추가하세요. 미실행 상태에서 실제 성공한 실험처럼 기술하지 않았습니다.

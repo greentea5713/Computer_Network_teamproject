@@ -4,6 +4,7 @@
 #include "LayerManager.h"
 #include "ChatAppLayer.h"
 #include "FileAppLayer.h"
+#include "IPLayer.h"
 #include "NILayer.h"
 
 class CMACFileTransferDlg : public CDialogEx, public CBaseLayer {
@@ -27,6 +28,11 @@ protected:
     afx_msg void OnBrowse();
     afx_msg void OnFileSend();
     afx_msg void OnAdapter();
+    afx_msg void OnArpSend();
+    afx_msg void OnArpDelete();
+    afx_msg void OnArpClear();
+    afx_msg void OnArpDoubleClick(NMHDR*, LRESULT*);
+    afx_msg void OnTimer(UINT_PTR);
     afx_msg LRESULT OnEvents(WPARAM, LPARAM);
 
     DECLARE_MESSAGE_MAP()
@@ -34,7 +40,11 @@ protected:
 private:
     void Queue(const std::wstring&);
     void QueueProgress(const CFileAppLayer::Progress&);
+    void QueueCacheRefresh();
     void ShowProgress(const CFileAppLayer::Progress&);
+    void RefreshCache();
+    bool ApplyDestination();
+    bool ReadIp(int control, IpAddress&);
     void Ready(bool);
     void Disconnect();
 
@@ -43,6 +53,8 @@ private:
     CEthernetLayer ethernet_{"Ethernet"};
     CChatAppLayer chat_{"ChatApp"};
     CFileAppLayer file_{"FileApp"};
+    CARPLayer arp_{"ARP"};
+    CIPLayer ip_{"IP"};
 
     std::vector<NetworkAdapter> adapters_;
     bool ready_ = false;
@@ -52,6 +64,7 @@ private:
     std::deque<std::wstring> events_;
     std::array<CFileAppLayer::Progress, 2> progress_{};
     std::array<bool, 2> progressPending_{};
+    bool cachePending_ = false;
     bool closing_ = false;
 
     std::wstring filePath_;

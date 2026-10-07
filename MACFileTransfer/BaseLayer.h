@@ -2,6 +2,7 @@
 #include "pch.h"
 
 using MacAddress = std::array<unsigned char, 6>;
+using IpAddress = std::array<unsigned char, 4>;
 
 // 상위 레이어가 Ethernet 헤더를 다시 해석하지 않도록 주소 정보를 함께 전달한다.
 struct FrameContext {

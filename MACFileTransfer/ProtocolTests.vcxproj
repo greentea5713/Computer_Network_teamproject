@@ -201,6 +201,8 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="EthernetLayer.h" />
+    <ClInclude Include="ARPLayer.h" />
+    <ClInclude Include="IPLayer.h" />
   </ItemGroup>
   <ItemGroup>
     
@@ -209,6 +211,7 @@
 <ClCompile Include="BaseLayer.cpp" />
     <ClCompile Include="ChatAppLayer.cpp" />
     <ClCompile Include="EthernetLayer.cpp" />
+    <ClCompile Include="ARPLayer.cpp" />
 
     
     

@@ -6,7 +6,30 @@ constexpr size_t kMinimumFrameSizeWithoutFcs = 60;
 constexpr size_t kMaximumFrameSizeWithoutFcs = Wire::EthernetHeader + Wire::MTU;
 }  // namespace
 
+int CEthernetLayer::UpperIndex(uint16_t type) {
+    switch (type) {
+    case Wire::ChatType:
+        return 0;
+    case Wire::FileType:
+        return 1;
+    case Wire::ArpType:
+        return 2;
+    case Wire::IpType:
+        return 3;
+    default:
+        return -1;
+    }
+}
+
 bool CEthernetLayer::SendPacket(const unsigned char* data, size_t length, uint16_t type) {
+    return SendPacket(data, length, type, GetDestinAddress());
+}
+
+bool CEthernetLayer::SendPacket(
+    const unsigned char* data,
+    size_t length,
+    uint16_t type,
+    const MacAddress& destination) {
     if (data == nullptr || length > Wire::MTU || GetUnderLayer() == nullptr) {
         return false;
     }
@@ -17,7 +40,7 @@ bool CEthernetLayer::SendPacket(const unsigned char* data, size_t length, uint16
         std::max(kMinimumFrameSizeWithoutFcs, Wire::EthernetHeader + length);
     std::vector<unsigned char> frame(frameSize, 0);
 
-    std::copy(destination_.begin(), destination_.end(), frame.begin());
+    std::copy(destination.begin(), destination.end(), frame.begin());
     std::copy(source_.begin(), source_.end(), frame.begin() + 6);
     Wire::Write16(frame.data() + 12, type);
     std::copy(data, data + length, frame.begin() + Wire::EthernetHeader);
@@ -37,21 +60,18 @@ bool CEthernetLayer::ReceiveFrame(
     FrameContext context;
     std::copy(frame, frame + 6, context.destination.begin());
     std::copy(frame + 6, frame + 12, context.source.begin());
+    const uint16_t type = Wire::Read16(frame + 12);
 
-    // 자신이 보낸 프레임과 자신에게 오지 않은 프레임을 상위 레이어에 전달하지 않는다.
-    if (context.source == source_ || context.destination != source_) {
+    // 자신이 보낸 프레임은 버린다.
+    // 목적지는 자기 MAC이어야 하며, 브로드캐스트는 ARP 요청을 받기 위해 ARP만 허용한다.
+    const bool toMe = context.destination == source_;
+    const bool arpBroadcast =
+        context.destination == Wire::BroadcastMac && type == Wire::ArpType;
+    if (context.source == source_ || (!toMe && !arpBroadcast)) {
         return false;
     }
 
-    const uint16_t type = Wire::Read16(frame + 12);
-    int upperIndex = -1;
-    if (type == Wire::ChatType) {
-        upperIndex = 0;
-    } else if (type == Wire::FileType) {
-        upperIndex = 1;
-    }
-
-    CBaseLayer* upperLayer = GetUpperLayer(upperIndex);
+    CBaseLayer* upperLayer = GetUpperLayer(UpperIndex(type));
     return upperLayer != nullptr &&
         upperLayer->ReceiveFrame(
             frame + Wire::EthernetHeader,
