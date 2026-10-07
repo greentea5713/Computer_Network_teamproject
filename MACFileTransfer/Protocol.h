@@ -6,25 +6,11 @@ namespace Wire {
 constexpr size_t EthernetHeader = 14;
 constexpr size_t MTU = 1500;
 
-constexpr size_t ChatHeader = 4;
-constexpr size_t ChatData = MTU - ChatHeader;
-
-constexpr size_t FileHeader = 12;
-constexpr size_t FileData = MTU - FileHeader;
-
-// 과제에서 정의한 사용자 EtherType이다.
-constexpr uint16_t ChatType = 0x2080;
-constexpr uint16_t FileType = 0x2090;
-
 // 표준 EtherType이다.
 constexpr uint16_t IpType = 0x0800;
 constexpr uint16_t ArpType = 0x0806;
 
 constexpr MacAddress BroadcastMac{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-
-constexpr unsigned char First = 0x00;
-constexpr unsigned char Middle = 0x01;
-constexpr unsigned char Last = 0x02;
 
 // 모든 다중 바이트 정수는 네트워크 바이트 순서(big endian)로 직렬화한다.
 inline uint16_t Read16(const unsigned char* data) {

@@ -191,6 +191,7 @@ bool CARPLayer::ReceiveFrame(
     MacAddress myMac{};
     IpAddress myIp{};
     bool changed = false;
+    bool forMe = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         myMac = mac_;
@@ -199,7 +200,7 @@ bool CARPLayer::ReceiveFrame(
             return false;
         }
 
-        const bool forMe = myIp != kUnspecifiedIp && targetIp == myIp;
+        forMe = myIp != kUnspecifiedIp && targetIp == myIp;
         const bool hasSenderIp = senderIp != kUnspecifiedIp && senderIp != myIp;
 
         // 이미 캐시에 있는 송신자는 갱신하고, 나를 향한 메시지의 송신자는 새로 추가한다.
@@ -214,20 +215,16 @@ bool CARPLayer::ReceiveFrame(
         }
     }
 
-    if (senderIp == myIp && myIp != kUnspecifiedIp) {
-        Status(L"IP 주소 충돌 감지: " + MappingText(senderIp, senderMac));
-    }
-
     if (changed) {
         CacheChanged();
     }
 
-    if (myIp == kUnspecifiedIp || targetIp != myIp) {
+    if (!forMe) {
         return true;
     }
 
     if (operation == kRequest) {
-        Status(L"ARP 요청 수신: " + MappingText(senderIp, senderMac) + L" (대상 " + Wire::IpText(targetIp) + L")");
+        Status(L"ARP 요청 수신: " + MappingText(senderIp, senderMac));
 
         // 요청의 송신자 정보를 대상 쪽으로 옮기고(SWAPPING) 자기 주소를 송신자에 넣어 응답한다.
         const bool replied = SendArp(kReply, senderMac, senderMac, senderIp);

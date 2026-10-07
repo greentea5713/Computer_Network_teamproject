@@ -8,21 +8,13 @@ constexpr size_t kMaximumFrameSizeWithoutFcs = Wire::EthernetHeader + Wire::MTU;
 
 int CEthernetLayer::UpperIndex(uint16_t type) {
     switch (type) {
-    case Wire::ChatType:
-        return 0;
-    case Wire::FileType:
-        return 1;
     case Wire::ArpType:
-        return 2;
+        return 0;
     case Wire::IpType:
-        return 3;
+        return 1;
     default:
         return -1;
     }
-}
-
-bool CEthernetLayer::SendPacket(const unsigned char* data, size_t length, uint16_t type) {
-    return SendPacket(data, length, type, GetDestinAddress());
 }
 
 bool CEthernetLayer::SendPacket(

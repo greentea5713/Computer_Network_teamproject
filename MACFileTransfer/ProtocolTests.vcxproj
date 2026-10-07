@@ -187,10 +187,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="NILayer.h" />
-    <ClInclude Include="FileAppLayer.h" />
     <ClInclude Include="Protocol.h" />
     <ClInclude Include="BaseLayer.h" />
-    <ClInclude Include="ChatAppLayer.h" />
     <ClInclude Include="FileLayer.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="MACFileTransfer.h" />
@@ -206,10 +204,8 @@
   </ItemGroup>
   <ItemGroup>
     
-    <ClCompile Include="FileAppLayer.cpp" />
     <ClCompile Include="../tests/ProtocolTests.cpp" />
 <ClCompile Include="BaseLayer.cpp" />
-    <ClCompile Include="ChatAppLayer.cpp" />
     <ClCompile Include="EthernetLayer.cpp" />
     <ClCompile Include="ARPLayer.cpp" />
 

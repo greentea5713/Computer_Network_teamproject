@@ -34,7 +34,6 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="NILayer.h"><Filter>헤더 파일</Filter></ClInclude>
-    <ClInclude Include="FileAppLayer.h"><Filter>헤더 파일</Filter></ClInclude>
     <ClInclude Include="Protocol.h"><Filter>헤더 파일</Filter></ClInclude>
     <ClInclude Include="BaseLayer.h">
       <Filter>헤더 파일</Filter>
@@ -43,9 +42,6 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="LayerManager.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="ChatAppLayer.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="ARPLayer.h"><Filter>헤더 파일</Filter></ClInclude>
@@ -68,14 +64,10 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="NILayer.cpp"><Filter>소스 파일</Filter></ClCompile>
-    <ClCompile Include="FileAppLayer.cpp"><Filter>소스 파일</Filter></ClCompile>
     <ClCompile Include="BaseLayer.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="LayerManager.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="ChatAppLayer.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="ARPLayer.cpp"><Filter>소스 파일</Filter></ClCompile>

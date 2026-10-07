@@ -8,8 +8,7 @@ constexpr ULONG kOidCurrentEthernetAddress = 0x01010102;
 constexpr int kCaptureSnapshotLength = 65'536;
 constexpr int kReadTimeoutMs = 100;
 constexpr size_t kMaximumFrameSizeWithoutFcs = Wire::EthernetHeader + Wire::MTU;
-constexpr char kProtocolFilter[] =
-    "ether proto 0x2080 or ether proto 0x2090 or ether proto 0x0806";
+constexpr char kProtocolFilter[] = "ether proto 0x0806";
 }  // namespace
 
 std::vector<NetworkAdapter> CNILayer::Enumerate() {
