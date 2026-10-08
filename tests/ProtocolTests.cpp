@@ -122,6 +122,17 @@ int main() {
         Require(arpA.Snapshot().empty(),"clear cache");
         Require(!ipLayerA.Request(ipA),"no request for own IP");
 
+        // 해시 테이블: 여러 항목 저장/검색, 같은 키는 같은 해시, 화면용 목록은 IP 순
+        Require(IpAddressHash{}(ipB)==IpAddressHash{}(IpAddress{168,188,129,2}),"same IP same hash");
+        for(int i=10;i>0;--i) Require(ipLayerA.Request(IpAddress{10,0,0,(unsigned char)i}),"many requests");
+        for(int i=1;i<=10;++i) { auto r=request; r[6+5]=(unsigned char)(0x40+i); std::copy(r.begin()+6,r.begin()+12,r.begin()+14+8);
+            Wire::Write16(r.data()+14+6,2); std::copy(a.begin(),a.end(),r.begin()); IpAddress s{10,0,0,(unsigned char)i};
+            std::copy(s.begin(),s.end(),r.begin()+14+14); std::copy(ipA.begin(),ipA.end(),r.begin()+14+24); ethA.ReceiveFrame(r.data(),r.size(),{}); }
+        cacheA=arpA.Snapshot(); Require(cacheA.size()==10,"ten entries stored");
+        for(int i=1;i<=10;++i) Require(arpA.Lookup(IpAddress{10,0,0,(unsigned char)i},resolved)&&resolved[5]==0x40+i,"hash lookup");
+        Require(std::is_sorted(cacheA.begin(),cacheA.end(),[](const CARPLayer::CacheEntry& l,const CARPLayer::CacheEntry& r){return l.ip<r.ip;}),"snapshot sorted by IP");
+        arpA.Clear();
+
         std::cout<<"PASS: "<<checks<<" assertions; no NIC opened, no network packets sent.\n";
         return 0;
     } catch(const std::exception& e) {std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<"\n"; return 1;}

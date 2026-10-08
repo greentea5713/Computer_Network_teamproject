@@ -105,11 +105,18 @@ bool CARPLayer::Lookup(const IpAddress& target, MacAddress& mac) {
 
 std::vector<CARPLayer::CacheEntry> CARPLayer::Snapshot() {
     std::vector<CacheEntry> entries;
-    std::lock_guard<std::mutex> lock(mutex_);
-    entries.reserve(cache_.size());
-    for (const auto& item : cache_) {
-        entries.push_back(item.second);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        entries.reserve(cache_.size());
+        for (const auto& item : cache_) {
+            entries.push_back(item.second);
+        }
     }
+
+    // 해시 테이블은 순서가 없으므로 화면 목록이 섞이지 않도록 IP 순으로 정렬한다.
+    std::sort(entries.begin(), entries.end(), [](const CacheEntry& left, const CacheEntry& right) {
+        return left.ip < right.ip;
+    });
     return entries;
 }
 

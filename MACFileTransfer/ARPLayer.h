@@ -1,8 +1,18 @@
 #pragma once
 #include "EthernetLayer.h"
 
+#include <unordered_map>
+
+// IPv4 주소 4바이트를 32비트 정수로 묶어 해시 키로 쓴다.
+struct IpAddressHash {
+    size_t operator()(const IpAddress& ip) const {
+        return std::hash<uint32_t>{}(Wire::Read32(ip.data()));
+    }
+};
+
 // IP 주소 → Ethernet 주소를 동적으로 매핑하는 ARP 레이어.
 // Ethernet 레이어 위에서 EtherType 0x0806 프레임을 송수신하고 ARP 캐시 테이블을 관리한다.
+// 캐시 테이블은 IP 주소를 키로 하는 해시 테이블이다.
 class CARPLayer : public CBaseLayer {
 public:
     enum class EntryState {
@@ -67,5 +77,5 @@ private:
     std::mutex mutex_;
     MacAddress mac_{};
     IpAddress ip_{};
-    std::map<IpAddress, CacheEntry> cache_;
+    std::unordered_map<IpAddress, CacheEntry, IpAddressHash> cache_;
 };

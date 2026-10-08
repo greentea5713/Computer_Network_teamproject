@@ -47,6 +47,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 - **요청**: 목적지 MAC 브로드캐스트, target MAC 0. 캐시에 없으면 `incomplete` 항목을 만듭니다.
 - **요청 수신**: target IP가 내 IP이면 송신자를 캐시에 추가/갱신하고 sender/target을 바꿔(SWAPPING) 유니캐스트로 응답합니다. 내 IP가 아니면 응답하지 않고, 캐시에 이미 있는 송신자만 갱신합니다(RFC 826 merge).
 - **응답 수신**: 송신자 매핑을 `complete`로 추가/갱신합니다.
+- **캐시 테이블**: IP 주소를 키로 하는 해시 테이블(`std::unordered_map`, IPv4 4바이트를 32비트 정수로 묶어 해시)입니다. 화면에는 IP 순으로 정렬해 표시합니다.
 - **캐시 만료**: complete 20분, incomplete 3분. NI 수신 스레드의 `OnIdle`과 UI 1초 타이머에서 정리합니다.
 - 디자인에 로그 영역이 없어 최근 상태 메시지(요청/응답 송수신 등)는 창 제목 표시줄에 표시합니다.
 
@@ -62,7 +63,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 
 ## 검증 및 한계
 
-- `build.ps1 -Test`: 실제 NIC 없이 모의 하위 계층으로 검사합니다(`tests/ProtocolTests.cpp`). 계층 연결, ARP 요청/응답 필드, 브로드캐스트 수신, SWAPPING, Ethernet 필터, 캐시 추가·갱신·만료·삭제. 2026-10-07 Debug x86 빌드와 검사 **50개 통과**.
+- `build.ps1 -Test`: 실제 NIC 없이 모의 하위 계층으로 검사합니다(`tests/ProtocolTests.cpp`). 계층 연결, ARP 요청/응답 필드, 브로드캐스트 수신, SWAPPING, Ethernet 필터, 캐시 추가·갱신·만료·삭제, 해시 테이블 저장·검색. 2026-10-08 Debug x86 빌드와 검사 **73개 통과**.
 - 실행 화면 배치를 과제 디자인과 대조했습니다. 실제 두 PC 사이의 ARP 교환은 아직 실행하지 않았습니다.
 - ARP 요청 재전송은 하지 않습니다. 응답이 없으면 incomplete 항목이 3분 뒤 삭제됩니다.
 
