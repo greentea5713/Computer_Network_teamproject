@@ -15,10 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="MACFileTransfer.h">
+    <ClInclude Include="ARP.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="MACFileTransferDlg.h">
+    <ClInclude Include="ARPDlg.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="framework.h">
@@ -38,9 +38,6 @@
     <ClInclude Include="BaseLayer.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="stdafx.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
     <ClInclude Include="LayerManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -49,15 +46,12 @@
     <ClInclude Include="EthernetLayer.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="FileLayer.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="MACFileTransfer.cpp">
+    <ClCompile Include="ARP.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="MACFileTransferDlg.cpp">
+    <ClCompile Include="ARPDlg.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
@@ -76,17 +70,17 @@
     </ClCompile>
 </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="MACFileTransfer.rc">
+    <ResourceCompile Include="ARP.rc">
       <Filter>리소스 파일</Filter>
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="res\MACFileTransfer.rc2">
+    <None Include="res\ARP.rc2">
       <Filter>리소스 파일</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="res\MACFileTransfer.ico">
+    <Image Include="res\ARP.ico">
       <Filter>리소스 파일</Filter>
     </Image>
   </ItemGroup>

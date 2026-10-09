@@ -1,5 +1,5 @@
 ﻿
-// MACFileTransfer.h: PROJECT_NAME 애플리케이션에 대한 주 헤더 파일입니다.
+// ARP.h: PROJECT_NAME 애플리케이션에 대한 주 헤더 파일입니다.
 //
 
 #pragma once
@@ -11,14 +11,14 @@
 #include "resource.h"		// 주 기호입니다.
 
 
-// CMACFileTransferApp:
-// 이 클래스의 구현에 대해서는 MACFileTransfer.cpp을(를) 참조하세요.
+// CARPApp:
+// 이 클래스의 구현에 대해서는 ARP.cpp을(를) 참조하세요.
 //
 
-class CMACFileTransferApp : public CWinApp
+class CARPApp : public CWinApp
 {
 public:
-	CMACFileTransferApp();
+	CARPApp();
 
 // 재정의입니다.
 public:
@@ -29,4 +29,4 @@ public:
 	DECLARE_MESSAGE_MAP()
 };
 
-extern CMACFileTransferApp theApp;
+extern CARPApp theApp;

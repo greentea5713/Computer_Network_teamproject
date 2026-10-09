@@ -14,10 +14,10 @@ if (!(Get-ChildItem "$vs\VC\Tools\MSVC\*\atlmfc\include\afxwin.h" -ErrorAction S
 $msbuild = Join-Path $vs 'MSBuild\Current\Bin\MSBuild.exe'
 Push-Location $PSScriptRoot
 try {
-    & $msbuild .\MACFileTransfer.sln /m /t:Build "/p:Configuration=$Configuration" /p:Platform=x86 /nologo /verbosity:minimal
+    & $msbuild .\ARP.sln /m /t:Build "/p:Configuration=$Configuration" /p:Platform=x86 /nologo /verbosity:minimal
     if ($LASTEXITCODE -ne 0) { throw 'Application build failed.' }
     if ($Test) {
-        & $msbuild .\MACFileTransfer\ProtocolTests.vcxproj /m /t:Build "/p:Configuration=$Configuration" /p:Platform=Win32 /nologo /verbosity:minimal
+        & $msbuild .\ARP\ProtocolTests.vcxproj /m /t:Build "/p:Configuration=$Configuration" /p:Platform=Win32 /nologo /verbosity:minimal
         if ($LASTEXITCODE -ne 0) { throw 'Test build failed.' }
         & .\tests\bin\ProtocolTests.exe
         if ($LASTEXITCODE -ne 0) { throw 'Protocol tests failed.' }

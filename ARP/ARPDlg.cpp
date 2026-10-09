@@ -1,6 +1,6 @@
 #include "pch.h"
-#include "MACFileTransfer.h"
-#include "MACFileTransferDlg.h"
+#include "ARP.h"
+#include "ARPDlg.h"
 
 namespace {
 constexpr UINT WM_NETWORK_EVENT = WM_APP + 17;
@@ -22,17 +22,17 @@ enum ProxyColumn {
 };
 }  // namespace
 
-BEGIN_MESSAGE_MAP(CMACFileTransferDlg, CDialogEx)
-    ON_BN_CLICKED(IDC_BUTTON_SELECT, &CMACFileTransferDlg::OnSelect)
-    ON_BN_CLICKED(IDC_BUTTON_ARP_SEND, &CMACFileTransferDlg::OnArpSend)
-    ON_BN_CLICKED(IDC_BUTTON_ARP_DELETE, &CMACFileTransferDlg::OnArpDelete)
-    ON_BN_CLICKED(IDC_BUTTON_ARP_CLEAR, &CMACFileTransferDlg::OnArpClear)
-    ON_CBN_SELCHANGE(IDC_COMBO_ADAPTER, &CMACFileTransferDlg::OnAdapter)
+BEGIN_MESSAGE_MAP(CARPDlg, CDialogEx)
+    ON_BN_CLICKED(IDC_BUTTON_SELECT, &CARPDlg::OnSelect)
+    ON_BN_CLICKED(IDC_BUTTON_ARP_SEND, &CARPDlg::OnArpSend)
+    ON_BN_CLICKED(IDC_BUTTON_ARP_DELETE, &CARPDlg::OnArpDelete)
+    ON_BN_CLICKED(IDC_BUTTON_ARP_CLEAR, &CARPDlg::OnArpClear)
+    ON_CBN_SELCHANGE(IDC_COMBO_ADAPTER, &CARPDlg::OnAdapter)
     ON_WM_TIMER()
-    ON_MESSAGE(WM_NETWORK_EVENT, &CMACFileTransferDlg::OnEvents)
+    ON_MESSAGE(WM_NETWORK_EVENT, &CARPDlg::OnEvents)
 END_MESSAGE_MAP()
 
-CMACFileTransferDlg::CMACFileTransferDlg(CWnd* parent)
+CARPDlg::CARPDlg(CWnd* parent)
     : CDialogEx(IDD, parent),
       CBaseLayer("ARPDlg") {
     manager_.AddLayer(&ni_);
@@ -55,7 +55,7 @@ CMACFileTransferDlg::CMACFileTransferDlg(CWnd* parent)
     arp_.onCacheChanged = [this] { QueueCacheRefresh(); };
 }
 
-BOOL CMACFileTransferDlg::OnInitDialog() {
+BOOL CARPDlg::OnInitDialog() {
     CDialogEx::OnInitDialog();
     SetIcon(AfxGetApp()->LoadIcon(IDR_MAINFRAME), TRUE);
     SetWindowText(kTitle);
@@ -91,7 +91,7 @@ BOOL CMACFileTransferDlg::OnInitDialog() {
     return TRUE;
 }
 
-void CMACFileTransferDlg::Ready(bool state) {
+void CARPDlg::Ready(bool state) {
     ready_ = state;
 
     for (int control : {
@@ -113,7 +113,7 @@ void CMACFileTransferDlg::Ready(bool state) {
     SetDlgItemText(IDC_BUTTON_SELECT, state ? L"Reset" : L"Select");
 }
 
-bool CMACFileTransferDlg::ReadIp(int control, IpAddress& address) {
+bool CARPDlg::ReadIp(int control, IpAddress& address) {
     auto* ipControl = static_cast<CIPAddressCtrl*>(GetDlgItem(control));
     if (ipControl->IsBlank()) {
         return false;
@@ -127,14 +127,14 @@ bool CMACFileTransferDlg::ReadIp(int control, IpAddress& address) {
     return true;
 }
 
-bool CMACFileTransferDlg::SelectedIp(IpAddress& address) {
+bool CARPDlg::SelectedIp(IpAddress& address) {
     auto* cacheList = static_cast<CListCtrl*>(GetDlgItem(IDC_LIST_ARP));
     const int selected = cacheList->GetNextItem(-1, LVNI_SELECTED);
     return selected >= 0 &&
         Wire::ParseIp(cacheList->GetItemText(selected, kCacheIp).GetString(), address);
 }
 
-void CMACFileTransferDlg::OnAdapter() {
+void CARPDlg::OnAdapter() {
     auto* adapterCombo = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_ADAPTER));
     const int selectedIndex = adapterCombo->GetCurSel();
     if (selectedIndex < 0 ||
@@ -155,7 +155,7 @@ void CMACFileTransferDlg::OnAdapter() {
     }
 }
 
-void CMACFileTransferDlg::OnSelect() {
+void CARPDlg::OnSelect() {
     if (ready_) {
         Disconnect();
         return;
@@ -204,7 +204,7 @@ void CMACFileTransferDlg::OnSelect() {
     }
 }
 
-void CMACFileTransferDlg::OnArpSend() {
+void CARPDlg::OnArpSend() {
     if (!ready_) {
         return;
     }
@@ -223,7 +223,7 @@ void CMACFileTransferDlg::OnArpSend() {
     ip_.Request(target);
 }
 
-void CMACFileTransferDlg::OnArpDelete() {
+void CARPDlg::OnArpDelete() {
     IpAddress target{};
     if (!SelectedIp(target)) {
         AfxMessageBox(L"삭제할 ARP 캐시 항목을 선택하세요.");
@@ -235,12 +235,12 @@ void CMACFileTransferDlg::OnArpDelete() {
     }
 }
 
-void CMACFileTransferDlg::OnArpClear() {
+void CARPDlg::OnArpClear() {
     arp_.Clear();
     Queue(L"ARP 캐시 전체 삭제");
 }
 
-void CMACFileTransferDlg::OnTimer(UINT_PTR id) {
+void CARPDlg::OnTimer(UINT_PTR id) {
     if (id != kCacheTimer) {
         CDialogEx::OnTimer(id);
         return;
@@ -250,7 +250,7 @@ void CMACFileTransferDlg::OnTimer(UINT_PTR id) {
     arp_.Expire(GetTickCount64());
 }
 
-void CMACFileTransferDlg::RefreshCache() {
+void CARPDlg::RefreshCache() {
     auto* cacheList = static_cast<CListCtrl*>(GetDlgItem(IDC_LIST_ARP));
     const int selected = cacheList->GetNextItem(-1, LVNI_SELECTED);
     const CString selectedIp =
@@ -280,7 +280,7 @@ void CMACFileTransferDlg::RefreshCache() {
     cacheList->Invalidate();
 }
 
-void CMACFileTransferDlg::Queue(const std::wstring& message) {
+void CARPDlg::Queue(const std::wstring& message) {
     std::lock_guard<std::mutex> lock(eventMutex_);
     if (closing_) {
         return;
@@ -297,7 +297,7 @@ void CMACFileTransferDlg::Queue(const std::wstring& message) {
     }
 }
 
-void CMACFileTransferDlg::QueueCacheRefresh() {
+void CARPDlg::QueueCacheRefresh() {
     std::lock_guard<std::mutex> lock(eventMutex_);
     if (closing_) {
         return;
@@ -310,7 +310,7 @@ void CMACFileTransferDlg::QueueCacheRefresh() {
     }
 }
 
-LRESULT CMACFileTransferDlg::OnEvents(WPARAM, LPARAM) {
+LRESULT CARPDlg::OnEvents(WPARAM, LPARAM) {
     std::deque<std::wstring> batch;
     bool cachePending = false;
     {
@@ -331,13 +331,13 @@ LRESULT CMACFileTransferDlg::OnEvents(WPARAM, LPARAM) {
     return 0;
 }
 
-void CMACFileTransferDlg::Disconnect() {
+void CARPDlg::Disconnect() {
     ni_.Close();
     Ready(false);
     SetWindowText(kTitle);
 }
 
-void CMACFileTransferDlg::OnCancel() {
+void CARPDlg::OnCancel() {
     {
         std::lock_guard<std::mutex> lock(eventMutex_);
         closing_ = true;
@@ -348,7 +348,7 @@ void CMACFileTransferDlg::OnCancel() {
     CDialogEx::OnCancel();
 }
 
-BOOL CMACFileTransferDlg::PreTranslateMessage(MSG* message) {
+BOOL CARPDlg::PreTranslateMessage(MSG* message) {
     if (message->message == WM_KEYDOWN && message->wParam == VK_RETURN) {
         // IP 주소 컨트롤은 내부 편집 상자가 포커스를 가지므로 부모 ID를 확인한다.
         if (::GetDlgCtrlID(::GetParent(::GetFocus())) == IDC_IP_TARGET) {

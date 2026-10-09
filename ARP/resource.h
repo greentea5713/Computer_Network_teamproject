@@ -1,11 +1,11 @@
 ﻿//{{NO_DEPENDENCIES}}
 // Microsoft Visual C++에서 생성한 포함 파일입니다.
-// MACFileTransfer.rc에서 사용되고 있습니다.
+// ARP.rc에서 사용되고 있습니다.
 //
 #define IDM_ABOUTBOX                    0x0010
 #define IDD_ABOUTBOX                    100
 #define IDS_ABOUTBOX                    101
-#define IDD_MACFILETRANSFER_DIALOG      102
+#define IDD_ARP_DIALOG      102
 #define IDR_MAINFRAME                   128
 #define IDC_LIST_ARP                    1000
 #define IDC_BUTTON_ARP_DELETE           1001

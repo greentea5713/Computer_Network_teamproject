@@ -6,7 +6,7 @@ File Transfer 프로젝트의 CBaseLayer 계층 구조(NI, Ethernet, Base, Layer
 
 ## 열기 및 빌드
 
-- `MACFileTransfer.sln`을 Visual Studio에서 열고 **Debug / x86**으로 빌드합니다.
+- `ARP.sln`을 Visual Studio에서 열고 **Debug / x86**으로 빌드합니다.
 - Visual Studio 2022의 **MSVC v143 C++ 도구**, **C++ MFC (x86 및 x64)**, Windows SDK와 Npcap SDK가 필요합니다. Visual Studio Installer → 수정 → 개별 구성 요소에서 MFC를 추가할 수 있습니다.
 - `dependencies\npcap-sdk-1.16`에 준비한 SDK를 우선 사용하며, 없으면 `C:\WpdPack`을 사용합니다. 다른 위치는 `NpcapSdkDir` MSBuild 속성으로 지정할 수 있습니다. SDK 공식 배포: https://npcap.com/#download
 - 실행 PC에는 Npcap 드라이버가 필요합니다. **`run.cmd`를 더블 클릭**하면 설치된 Npcap DLL 경로를 적용하여 Debug x86 프로그램을 실행합니다. 실행 파일이 없으면 먼저 빌드합니다.

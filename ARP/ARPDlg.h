@@ -5,12 +5,12 @@
 #include "IPLayer.h"
 #include "NILayer.h"
 
-class CMACFileTransferDlg : public CDialogEx, public CBaseLayer {
+class CARPDlg : public CDialogEx, public CBaseLayer {
 public:
-    explicit CMACFileTransferDlg(CWnd* parent = nullptr);
+    explicit CARPDlg(CWnd* parent = nullptr);
 
     enum {
-        IDD = IDD_MACFILETRANSFER_DIALOG
+        IDD = IDD_ARP_DIALOG
     };
 
 protected:

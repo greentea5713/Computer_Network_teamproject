@@ -22,7 +22,7 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{57D6BFBC-B10D-4EBE-A7D2-3D528773EA6D}</ProjectGuid>
     <Keyword>MFCProj</Keyword>
-    <RootNamespace>MACFileTransfer</RootNamespace>
+    <RootNamespace>ARP</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -189,14 +189,12 @@
     <ClInclude Include="NILayer.h" />
     <ClInclude Include="Protocol.h" />
     <ClInclude Include="BaseLayer.h" />
-    <ClInclude Include="FileLayer.h" />
     <ClInclude Include="framework.h" />
-    <ClInclude Include="MACFileTransfer.h" />
-    <ClInclude Include="MACFileTransferDlg.h" />
+    <ClInclude Include="ARP.h" />
+    <ClInclude Include="ARPDlg.h" />
     <ClInclude Include="LayerManager.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Resource.h" />
-    <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="EthernetLayer.h" />
     <ClInclude Include="ARPLayer.h" />
@@ -208,8 +206,8 @@
     <ClCompile Include="EthernetLayer.cpp" />
     <ClCompile Include="ARPLayer.cpp" />
 
-    <ClCompile Include="MACFileTransfer.cpp" />
-    <ClCompile Include="MACFileTransferDlg.cpp" />
+    <ClCompile Include="ARP.cpp" />
+    <ClCompile Include="ARPDlg.cpp" />
     <ClCompile Include="LayerManager.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -219,13 +217,13 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="MACFileTransfer.rc" />
+    <ResourceCompile Include="ARP.rc" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="res\MACFileTransfer.rc2" />
+    <None Include="res\ARP.rc2" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="res\MACFileTransfer.ico" />
+    <Image Include="res\ARP.ico" />
   </ItemGroup>
   <PropertyGroup>
     <NpcapSdkDir Condition="'$(NpcapSdkDir)'=='' and Exists('$(ProjectDir)..\dependencies\npcap-sdk-1.16\Include\pcap.h')">$(ProjectDir)..\dependencies\npcap-sdk-1.16</NpcapSdkDir>
