@@ -32,8 +32,9 @@ bool CEthernetLayer::SendPacket(
         std::max(kMinimumFrameSizeWithoutFcs, Wire::EthernetHeader + length);
     std::vector<unsigned char> frame(frameSize, 0);
 
+    const MacAddress source = GetSourceAddress();
     std::copy(destination.begin(), destination.end(), frame.begin());
-    std::copy(source_.begin(), source_.end(), frame.begin() + 6);
+    std::copy(source.begin(), source.end(), frame.begin() + 6);
     Wire::Write16(frame.data() + 12, type);
     std::copy(data, data + length, frame.begin() + Wire::EthernetHeader);
 
@@ -56,10 +57,11 @@ bool CEthernetLayer::ReceiveFrame(
 
     // 자신이 보낸 프레임은 버린다.
     // 목적지는 자기 MAC이어야 하며, 브로드캐스트는 ARP 요청을 받기 위해 ARP만 허용한다.
-    const bool toMe = context.destination == source_;
+    const MacAddress source = GetSourceAddress();
+    const bool toMe = context.destination == source;
     const bool arpBroadcast =
         context.destination == Wire::BroadcastMac && type == Wire::ArpType;
-    if (context.source == source_ || (!toMe && !arpBroadcast)) {
+    if (context.source == source || (!toMe && !arpBroadcast)) {
         return false;
     }
 

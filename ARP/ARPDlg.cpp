@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "ARP.h"
 #include "ARPDlg.h"
+#include "ProxyAddDlg.h"
 
 namespace {
 constexpr UINT WM_NETWORK_EVENT = WM_APP + 17;
@@ -27,6 +28,9 @@ BEGIN_MESSAGE_MAP(CARPDlg, CDialogEx)
     ON_BN_CLICKED(IDC_BUTTON_ARP_SEND, &CARPDlg::OnArpSend)
     ON_BN_CLICKED(IDC_BUTTON_ARP_DELETE, &CARPDlg::OnArpDelete)
     ON_BN_CLICKED(IDC_BUTTON_ARP_CLEAR, &CARPDlg::OnArpClear)
+    ON_BN_CLICKED(IDC_BUTTON_PROXY_ADD, &CARPDlg::OnProxyAdd)
+    ON_BN_CLICKED(IDC_BUTTON_PROXY_DELETE, &CARPDlg::OnProxyDelete)
+    ON_BN_CLICKED(IDC_BUTTON_GARP_SEND, &CARPDlg::OnGarpSend)
     ON_CBN_SELCHANGE(IDC_COMBO_ADAPTER, &CARPDlg::OnAdapter)
     ON_WM_TIMER()
     ON_MESSAGE(WM_NETWORK_EVENT, &CARPDlg::OnEvents)
@@ -53,6 +57,7 @@ CARPDlg::CARPDlg(CWnd* parent)
     ni_.notify = notify;
     arp_.notify = notify;
     arp_.onCacheChanged = [this] { QueueCacheRefresh(); };
+    arp_.onDuplicateIp = [this](const MacAddress& mac) { QueueDuplicate(mac); };
 }
 
 BOOL CARPDlg::OnInitDialog() {
@@ -198,6 +203,7 @@ void CARPDlg::OnSelect() {
 
     if (ni_.Open(adapter)) {
         Ready(true);
+        SetDlgItemText(IDC_EDIT_GARP, Wire::MacText(source).c_str());
         Queue(L"주소 설정 완료: " + Wire::IpText(myIp) + L" / " + Wire::MacText(source));
     } else {
         AfxMessageBox(L"장치를 열지 못했습니다. Npcap 설정을 확인하세요.");
@@ -238,6 +244,69 @@ void CARPDlg::OnArpDelete() {
 void CARPDlg::OnArpClear() {
     arp_.Clear();
     Queue(L"ARP 캐시 전체 삭제");
+}
+
+void CARPDlg::OnProxyAdd() {
+    auto* adapterCombo = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_ADAPTER));
+    CProxyAddDlg dialog(adapters_, adapterCombo->GetCurSel(), this);
+    if (dialog.DoModal() != IDOK) {
+        return;
+    }
+
+    if (!arp_.AddProxy(dialog.Entry())) {
+        AfxMessageBox(L"내 IP 주소는 Proxy ARP 항목으로 추가할 수 없습니다.");
+        return;
+    }
+    RefreshProxy();
+    Queue(L"Proxy ARP 항목 추가: " + Wire::IpText(dialog.Entry().ip));
+}
+
+void CARPDlg::OnProxyDelete() {
+    auto* proxyList = static_cast<CListCtrl*>(GetDlgItem(IDC_LIST_PROXY));
+    const int selected = proxyList->GetNextItem(-1, LVNI_SELECTED);
+    IpAddress target{};
+    if (selected < 0 ||
+        !Wire::ParseIp(proxyList->GetItemText(selected, kProxyIp).GetString(), target)) {
+        AfxMessageBox(L"삭제할 Proxy ARP 항목을 선택하세요.");
+        return;
+    }
+
+    if (arp_.RemoveProxy(target)) {
+        RefreshProxy();
+        Queue(L"Proxy ARP 항목 삭제: " + Wire::IpText(target));
+    }
+}
+
+void CARPDlg::OnGarpSend() {
+    if (!ready_) {
+        return;
+    }
+
+    CString macText;
+    GetDlgItemText(IDC_EDIT_GARP, macText);
+    MacAddress mac{};
+    if (!Wire::ParseMac(macText.GetString(), mac) || (mac[0] & 1) != 0) {
+        AfxMessageBox(L"알릴 유니캐스트 H/W 주소를 입력하세요. 예: 00:11:22:33:44:55");
+        return;
+    }
+
+    // 입력한 H/W 주소를 내 MAC으로 바꾼 뒤(NIC 교체 상황) 자기 IP에 대한 ARP 요청을 브로드캐스트한다.
+    ethernet_.SetSourceAddress(mac);
+    arp_.SetSourceAddress(mac, ip_.GetSourceAddress());
+    arp_.SendGratuitous();
+}
+
+void CARPDlg::RefreshProxy() {
+    auto* proxyList = static_cast<CListCtrl*>(GetDlgItem(IDC_LIST_PROXY));
+    const std::vector<CARPLayer::ProxyEntry> entries = arp_.ProxySnapshot();
+
+    proxyList->DeleteAllItems();
+    for (int index = 0; index < static_cast<int>(entries.size()); ++index) {
+        const CARPLayer::ProxyEntry& entry = entries[index];
+        proxyList->InsertItem(index, entry.device.c_str());
+        proxyList->SetItemText(index, kProxyIp, Wire::IpText(entry.ip).c_str());
+        proxyList->SetItemText(index, kProxyMac, Wire::MacText(entry.mac).c_str());
+    }
 }
 
 void CARPDlg::OnTimer(UINT_PTR id) {
@@ -310,14 +379,33 @@ void CARPDlg::QueueCacheRefresh() {
     }
 }
 
+void CARPDlg::QueueDuplicate(const MacAddress& mac) {
+    std::lock_guard<std::mutex> lock(eventMutex_);
+    if (closing_) {
+        return;
+    }
+
+    const bool shouldWakeUi = events_.empty() && !cachePending_ && !duplicatePending_;
+    duplicateMac_ = mac;
+    duplicatePending_ = true;
+    if (shouldWakeUi && GetSafeHwnd() != nullptr) {
+        PostMessage(WM_NETWORK_EVENT);
+    }
+}
+
 LRESULT CARPDlg::OnEvents(WPARAM, LPARAM) {
     std::deque<std::wstring> batch;
     bool cachePending = false;
+    bool duplicatePending = false;
+    MacAddress duplicateMac{};
     {
         std::lock_guard<std::mutex> lock(eventMutex_);
         batch.swap(events_);
         cachePending = cachePending_;
         cachePending_ = false;
+        duplicatePending = duplicatePending_;
+        duplicatePending_ = false;
+        duplicateMac = duplicateMac_;
     }
 
     if (cachePending) {
@@ -327,6 +415,16 @@ LRESULT CARPDlg::OnEvents(WPARAM, LPARAM) {
     // 디자인에 로그 영역이 없으므로 가장 최근 상태를 제목 표시줄에 보여 준다.
     if (!batch.empty()) {
         SetWindowText((std::wstring(kTitle) + L" - " + batch.back()).c_str());
+    }
+
+    // IP 중복은 놓치지 않도록 메시지 상자로 알린다. 상자가 떠 있는 동안 다시 띄우지 않는다.
+    if (duplicatePending && !duplicateShowing_) {
+        duplicateShowing_ = true;
+        MessageBox(
+            (L"duplicate IP address sent from Ethernet address: " + Wire::MacText(duplicateMac)).c_str(),
+            kTitle,
+            MB_ICONWARNING | MB_OK);
+        duplicateShowing_ = false;
     }
     return 0;
 }

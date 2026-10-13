@@ -133,6 +133,53 @@ int main() {
         Require(std::is_sorted(cacheA.begin(),cacheA.end(),[](const CARPLayer::CacheEntry& l,const CARPLayer::CacheEntry& r){return l.ip<r.ip;}),"snapshot sorted by IP");
         arpA.Clear();
 
+        // GARP: B가 A를 캐시에 가진 상태에서 A가 MAC을 바꿔 자기 IP에 대한 요청을 보낸다.
+        arpB.Clear(); captureA.packets.clear(); captureB.packets.clear();
+        Require(ethB.ReceiveFrame(request.data(),request.size(),{})&&arpB.Lookup(ipA,resolved)&&resolved==a,"B knows A before GARP");
+        captureB.packets.clear();
+        ethA.SetSourceAddress(a2); arpA.SetSourceAddress(a2,ipA);
+        Require(arpA.SendGratuitous()&&captureA.packets.size()==1,"GARP sent");
+        const auto garp=captureA.packets.back(); const unsigned char* g=garp.data()+14;
+        Require(std::equal(garp.begin(),garp.begin()+6,Wire::BroadcastMac.begin())&&std::equal(garp.begin()+6,garp.begin()+12,a2.begin()),"GARP broadcast from new MAC");
+        Require(Wire::Read16(g+6)==1&&std::equal(g+8,g+14,a2.begin())&&std::equal(g+14,g+18,ipA.begin()),"GARP sender is new MAC and own IP");
+        Require(std::all_of(g+18,g+24,[](unsigned char x){return x==0;})&&std::equal(g+24,g+28,ipA.begin()),"GARP target is own IP");
+        Require(ethB.ReceiveFrame(garp.data(),garp.size(),{}),"GARP received");
+        Require(arpB.Lookup(ipA,resolved)&&resolved==a2&&captureB.packets.empty(),"GARP updates cache without reply");
+
+        // GARP에 응답이 오면 IP 중복이다. (A가 B와 같은 IP로 GARP를 보낸 경우)
+        MacAddress duplicateAtA{}, duplicateAtB{};
+        arpA.onDuplicateIp=[&](const MacAddress& m){duplicateAtA=m;};
+        arpB.onDuplicateIp=[&](const MacAddress& m){duplicateAtB=m;};
+        captureA.packets.clear(); arpA.SetSourceAddress(a2,ipB);
+        Require(arpA.SendGratuitous(),"duplicate GARP sent");
+        Require(ethB.ReceiveFrame(captureA.packets.back().data(),captureA.packets.back().size(),{}),"duplicate GARP received");
+        Require(duplicateAtB==a2,"owner detects duplicate IP");
+        Require(captureB.packets.size()==1,"owner replies to GARP for its IP");
+        const auto dupReply=captureB.packets.back();
+        Require(ethA.ReceiveFrame(dupReply.data(),dupReply.size(),{})&&duplicateAtA==b,"GARP sender detects duplicate IP from reply");
+        arpA.onDuplicateIp=nullptr; arpB.onDuplicateIp=nullptr;
+        ethA.SetSourceAddress(a); arpA.SetSourceAddress(a,ipA); arpA.Clear();
+
+        // Proxy ARP: 내 IP가 아닌 요청이면 Proxy 테이블 항목으로 대신 응답한다.
+        arpB.Clear(); captureB.packets.clear();
+        MacAddress proxyMac{0x02,0,0,0,0,0x0B};
+        Require(arpB.AddProxy({L"eth0",ipC,proxyMac})&&arpB.ProxySnapshot().size()==1,"proxy entry added");
+        Require(!arpB.AddProxy({L"eth0",ipB,proxyMac}),"own IP cannot be proxied");
+        auto forC=request; std::copy(ipC.begin(),ipC.end(),forC.begin()+14+24);
+        Require(ethB.ReceiveFrame(forC.data(),forC.size(),{})&&captureB.packets.size()==1,"proxy reply sent");
+        const auto proxyReply=captureB.packets.back(); const unsigned char* pr=proxyReply.data()+14;
+        Require(std::equal(proxyReply.begin(),proxyReply.begin()+6,a.begin())&&std::equal(proxyReply.begin()+6,proxyReply.begin()+12,b.begin()),"proxy reply unicast from own NIC");
+        Require(Wire::Read16(pr+6)==2&&std::equal(pr+8,pr+14,proxyMac.begin())&&std::equal(pr+14,pr+18,ipC.begin()),"proxy reply uses entry for proxied IP");
+        Require(std::equal(pr+18,pr+24,a.begin())&&std::equal(pr+24,pr+28,ipA.begin()),"proxy reply target");
+        Require(arpB.Lookup(ipA,resolved)&&resolved==a,"proxy adds requester to cache");
+        Require(ethA.ReceiveFrame(proxyReply.data(),proxyReply.size(),{})&&arpA.Lookup(ipC,resolved)&&resolved==proxyMac,"requester caches proxied mapping");
+        auto garpC=request; std::copy(c.begin(),c.end(),garpC.begin()+6); std::copy(c.begin(),c.end(),garpC.begin()+14+8);
+        std::copy(ipC.begin(),ipC.end(),garpC.begin()+14+14); std::copy(ipC.begin(),ipC.end(),garpC.begin()+14+24);
+        captureB.packets.clear();
+        Require(ethB.ReceiveFrame(garpC.data(),garpC.size(),{})&&captureB.packets.empty(),"GARP is not proxied");
+        Require(arpB.RemoveProxy(ipC)&&arpB.ProxySnapshot().empty(),"proxy entry removed");
+        Require(ethB.ReceiveFrame(forC.data(),forC.size(),{})&&captureB.packets.empty(),"no reply after proxy removal");
+
         std::cout<<"PASS: "<<checks<<" assertions; no NIC opened, no network packets sent.\n";
         return 0;
     } catch(const std::exception& e) {std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<"\n"; return 1;}

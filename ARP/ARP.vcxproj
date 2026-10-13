@@ -199,12 +199,14 @@
     <ClInclude Include="EthernetLayer.h" />
     <ClInclude Include="ARPLayer.h" />
     <ClInclude Include="IPLayer.h" />
+    <ClInclude Include="ProxyAddDlg.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NILayer.cpp" />
     <ClCompile Include="BaseLayer.cpp" />
     <ClCompile Include="EthernetLayer.cpp" />
     <ClCompile Include="ARPLayer.cpp" />
+    <ClCompile Include="ProxyAddDlg.cpp" />
 
     <ClCompile Include="ARP.cpp" />
     <ClCompile Include="ARPDlg.cpp" />

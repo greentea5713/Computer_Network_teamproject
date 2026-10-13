@@ -1,4 +1,4 @@
-# ARP (Practice 6)
+# ARP (Practice 6, 7) — Basic ARP, Gratuitous ARP, Proxy ARP
 
 File Transfer 프로젝트의 CBaseLayer 계층 구조(NI, Ethernet, Base, LayerManager)를 재사용하여 ARP 프로그램을 구현했습니다.
 
@@ -37,7 +37,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 ```
 
 - 연결 문자열: `NI ( *Ethernet ( *ARP *IP ( +ARPDlg ) ) )`
-- `ARPLayer`(`ARPLayer.h/.cpp`): ARP 메시지 송수신, 캐시 테이블.
+- `ARPLayer`(`ARPLayer.h/.cpp`): ARP 메시지 송수신, 캐시 테이블, GARP 송신, Proxy ARP 테이블. `ProxyAddDlg`: Proxy 항목 입력 창.
 - `IPLayer`(`IPLayer.h`): 자기 IP 보관, `Request`/`Resolve`로 ARP에 주소 해석 요청. IP 데이터그램 송수신은 라우팅 실습에서 확장합니다.
 - `EthernetLayer`: 목적지 MAC을 지정해 송신합니다. 자기 MAC 목적지와, ARP에 한해 브로드캐스트를 수신합니다. 자기 송신 프레임은 버립니다.
 
@@ -49,6 +49,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 - **응답 수신**: 송신자 매핑을 `complete`로 추가/갱신합니다.
 - **캐시 테이블**: IP 주소를 키로 하는 해시 테이블(`std::unordered_map`, IPv4 4바이트를 32비트 정수로 묶어 해시)입니다. 화면에는 IP 순으로 정렬해 표시합니다.
 - **캐시 만료**: complete 20분, incomplete 3분. NI 수신 스레드의 `OnIdle`과 UI 1초 타이머에서 정리합니다.
+- **Gratuitous ARP**: H/W 주소 칸의 MAC을 내 MAC으로 바꾼 뒤(NIC 교체 상황) sender IP = target IP = 내 IP인 요청을 브로드캐스트합니다. 이 IP를 캐시에 가진 호스트는 새 MAC으로 갱신하고 응답하지 않습니다. 응답이 오면 다른 호스트가 같은 IP를 쓰는 것이므로 `duplicate IP address sent from Ethernet address: xx:xx:xx:xx:xx:xx`를 메시지 상자로 알립니다. 내 IP에 대한 GARP를 받은 쪽도 응답하고 같은 경고를 띄웁니다.
+- **Proxy ARP**: Proxy ARP 테이블(Device, IP Address, Ethernet Address, 해시 테이블)을 둡니다. 요청의 target IP가 내 IP가 아니면 테이블을 찾아, 항목이 있으면 그 항목의 Ethernet 주소를 sender MAC으로, 그 IP를 sender IP로 넣어 응답하고 요청자를 캐시에 추가/갱신합니다. Ethernet 프레임 출발지는 내 NIC MAC입니다. GARP(sender IP == target IP)에는 대신 응답하지 않습니다.
 - 디자인에 로그 영역이 없어 최근 상태 메시지(요청/응답 송수신 등)는 창 제목 표시줄에 표시합니다.
 
 ## 실행 (Host A ↔ Host B)
@@ -57,14 +59,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 2. Host A: ARP Cache 아래 IP 칸에 B의 IP를 입력하고 **Send**(또는 Enter). A의 캐시에 `incomplete` 항목이 생깁니다.
 3. Host B는 요청을 받아 A를 캐시에 추가하고 응답합니다. A의 항목이 `complete`와 B의 MAC으로 바뀝니다.
 4. **Item Delete**/**All Delete**로 캐시를 삭제합니다.
-5. Wireshark 표시 필터: `arp`.
+5. GARP: Host B가 A를 캐시에 가진 상태에서, Host A의 H/W 주소 칸(Select 시 내 MAC으로 채워짐)을 다른 MAC으로 바꾸고 **Send**. B의 캐시에서 A 항목의 MAC이 바뀝니다.
+6. Proxy ARP: Host B에서 **Add** → Device 선택(그 장치의 MAC이 Ethernet Address에 채워짐, 수정 가능), 대신 응답할 IP 입력 → OK. Host A가 그 IP로 ARP 요청을 보내면 B가 응답하고 A의 캐시에 그 IP와 항목의 Ethernet 주소가 추가됩니다. **Delete**로 항목을 지웁니다.
+7. Wireshark 표시 필터: `arp`.
 
 - PC의 실제 IP를 내 IP로 쓰면 Windows도 같은 요청에 응답하여 응답이 두 개 보일 수 있습니다. 실습 토폴로지처럼 사용하지 않는 IP를 지정하면 이 프로그램만 응답합니다.
 
 ## 검증 및 한계
 
-- `build.ps1 -Test`: 실제 NIC 없이 모의 하위 계층으로 검사합니다(`tests/ProtocolTests.cpp`). 계층 연결, ARP 요청/응답 필드, 브로드캐스트 수신, SWAPPING, Ethernet 필터, 캐시 추가·갱신·만료·삭제, 해시 테이블 저장·검색. 2026-10-08 Debug x86 빌드와 검사 **73개 통과**.
-- 실행 화면 배치를 과제 디자인과 대조했습니다. 실제 두 PC 사이의 ARP 교환은 아직 실행하지 않았습니다.
+- `build.ps1 -Test`: 실제 NIC 없이 모의 하위 계층으로 검사합니다(`tests/ProtocolTests.cpp`). 계층 연결, ARP 요청/응답 필드, 브로드캐스트 수신, SWAPPING, Ethernet 필터, 캐시 추가·갱신·만료·삭제, 해시 테이블 저장·검색, GARP 송수신·캐시 갱신·IP 중복 감지, Proxy ARP 응답·추가·삭제. 2026-10-13 Debug x86 빌드와 검사 **96개 통과**.
+- 실행 화면 배치를 과제 디자인과 대조했습니다. 실제 두 PC 사이의 ARP/GARP/Proxy ARP 교환은 아직 실행하지 않았습니다.
 - ARP 요청 재전송은 하지 않습니다. 응답이 없으면 incomplete 항목이 3분 뒤 삭제됩니다.
 
 ## 보고서 제출 전

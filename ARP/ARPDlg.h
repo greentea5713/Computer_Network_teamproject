@@ -24,6 +24,9 @@ protected:
     afx_msg void OnArpSend();
     afx_msg void OnArpDelete();
     afx_msg void OnArpClear();
+    afx_msg void OnProxyAdd();
+    afx_msg void OnProxyDelete();
+    afx_msg void OnGarpSend();
     afx_msg void OnTimer(UINT_PTR);
     afx_msg LRESULT OnEvents(WPARAM, LPARAM);
 
@@ -32,7 +35,9 @@ protected:
 private:
     void Queue(const std::wstring&);
     void QueueCacheRefresh();
+    void QueueDuplicate(const MacAddress&);
     void RefreshCache();
+    void RefreshProxy();
     bool ReadIp(int control, IpAddress&);
     bool SelectedIp(IpAddress&);
     void Ready(bool);
@@ -51,5 +56,8 @@ private:
     std::mutex eventMutex_;
     std::deque<std::wstring> events_;
     bool cachePending_ = false;
+    bool duplicatePending_ = false;
+    MacAddress duplicateMac_{};
+    bool duplicateShowing_ = false;
     bool closing_ = false;
 };
