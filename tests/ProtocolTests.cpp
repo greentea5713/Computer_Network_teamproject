@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "LayerManager.h"
 #include "IPLayer.h"
+#include "RouterCore.h"
 #include <iostream>
 static int checks=0;
 void Require(bool condition,const char* text) { if(!condition) throw std::runtime_error(text); ++checks; }
@@ -12,6 +13,23 @@ public:
 };
 int main() {
     try {
+        {
+            RouteEntry def{{0,0,0,0},{0,0,0,0},{10,0,0,1},1,true};
+            RouteEntry direct{{192,168,1,0},{255,255,255,0},{},0,false};
+            RouteEntry selected;
+            Require(RouterCore::Select({def,direct}, {192,168,1,42}, selected) && selected.port == 0, "longest prefix route");
+            Require(RouterCore::Select({def,direct}, {172,16,0,2}, selected) && selected.viaGateway && selected.gateway == def.gateway, "default gateway route");
+            RouteEntry invalid = direct; invalid.mask = {255,0,255,0};
+            Require(!RouterCore::ValidRoute(invalid), "noncontiguous mask rejected");
+            unsigned char datagram[20]{};
+            datagram[0] = 0x45; Wire::Write16(datagram + 2, 20); datagram[8] = 64;
+            Wire::Write16(datagram + 10, RouterCore::Checksum(datagram, 20));
+            std::vector<unsigned char> forwarded;
+            Require(RouterCore::Prepare(datagram, 20, forwarded) && forwarded[8] == 63 && RouterCore::Checksum(forwarded.data(), 20) == 0, "TTL and checksum");
+            datagram[8] = 1; datagram[10] = datagram[11] = 0;
+            Wire::Write16(datagram + 10, RouterCore::Checksum(datagram, 20));
+            Require(!RouterCore::Prepare(datagram, 20, forwarded), "expired TTL rejected");
+        }
         MacAddress a{0x02,0,0,0,0,1},b{0x02,0,0,0,0,2};
         MacAddress parsed{}; Require(Wire::ParseMac(L"02:00:00:00:00:01",parsed)&&parsed==a,"MAC parse");
         Require(!Wire::ParseMac(L"02:00:00:00:00:GG",parsed),"invalid MAC");

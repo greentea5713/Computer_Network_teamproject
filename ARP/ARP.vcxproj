@@ -199,6 +199,8 @@
     <ClInclude Include="EthernetLayer.h" />
     <ClInclude Include="ARPLayer.h" />
     <ClInclude Include="IPLayer.h" />
+    <ClInclude Include="RouterCore.h" />
+    <ClInclude Include="Router.h" />
     <ClInclude Include="ProxyAddDlg.h" />
   </ItemGroup>
   <ItemGroup>

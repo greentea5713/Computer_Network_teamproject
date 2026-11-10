@@ -8,12 +8,13 @@ constexpr UINT WM_NETWORK_EVENT = WM_APP + 17;
 constexpr size_t kMaximumQueuedEvents = 1000;
 constexpr UINT_PTR kCacheTimer = 1;
 constexpr UINT kCacheTimerMs = 1000;
-constexpr wchar_t kTitle[] = L"ARP";
+constexpr wchar_t kTitle[] = L"Router";
 
 enum CacheColumn {
     kCacheIp,
     kCacheMac,
     kCacheState,
+    kCachePort,
 };
 
 enum ProxyColumn {
@@ -25,6 +26,8 @@ enum ProxyColumn {
 
 BEGIN_MESSAGE_MAP(CARPDlg, CDialogEx)
     ON_BN_CLICKED(IDC_BUTTON_SELECT, &CARPDlg::OnSelect)
+    ON_BN_CLICKED(IDC_ROUTE_ADD, &CARPDlg::OnRouteAdd)
+    ON_BN_CLICKED(IDC_ROUTE_DELETE, &CARPDlg::OnRouteDelete)
     ON_BN_CLICKED(IDC_BUTTON_ARP_SEND, &CARPDlg::OnArpSend)
     ON_BN_CLICKED(IDC_BUTTON_ARP_DELETE, &CARPDlg::OnArpDelete)
     ON_BN_CLICKED(IDC_BUTTON_ARP_CLEAR, &CARPDlg::OnArpClear)
@@ -32,6 +35,7 @@ BEGIN_MESSAGE_MAP(CARPDlg, CDialogEx)
     ON_BN_CLICKED(IDC_BUTTON_PROXY_DELETE, &CARPDlg::OnProxyDelete)
     ON_BN_CLICKED(IDC_BUTTON_GARP_SEND, &CARPDlg::OnGarpSend)
     ON_CBN_SELCHANGE(IDC_COMBO_ADAPTER, &CARPDlg::OnAdapter)
+    ON_CBN_SELCHANGE(IDC_COMBO_ADAPTER2, &CARPDlg::OnAdapter2)
     ON_WM_TIMER()
     ON_MESSAGE(WM_NETWORK_EVENT, &CARPDlg::OnEvents)
 END_MESSAGE_MAP()
@@ -43,11 +47,19 @@ CARPDlg::CARPDlg(CWnd* parent)
     manager_.AddLayer(&ethernet_);
     manager_.AddLayer(&arp_);
     manager_.AddLayer(&ip_);
+    manager_.AddLayer(&input1_);
     manager_.AddLayer(this);
 
     // NI → Ethernet에서 EtherType으로 분기한다. 0x0806 ARP, 0x0800 IP
     // ARP와 IP는 Ethernet 위에 나란히 놓이고, Application(Dialog)은 IP 위에 놓인다.
-    manager_.ConnectLayers("NI ( *Ethernet ( *ARP *IP ( +ARPDlg ) ) )");
+    manager_.ConnectLayers("NI ( *Ethernet ( *ARP *Router1 ) )");
+    ni2_.SetUpperUnderLayer(&ethernet2_);
+    ethernet2_.SetUpperUnderLayer(&arp2_);
+    ethernet2_.SetUpperUnderLayer(&input2_);
+    router_.ports[0].ethernet = &ethernet_;
+    router_.ports[0].arp = &arp_;
+    router_.ports[1].ethernet = &ethernet2_;
+    router_.ports[1].arp = &arp2_;
     // IP 레이어는 목적지 Ethernet 주소 해석을 ARP 레이어에 요청한다.
     ip_.SetArpLayer(&arp_);
 
@@ -58,6 +70,9 @@ CARPDlg::CARPDlg(CWnd* parent)
     arp_.notify = notify;
     arp_.onCacheChanged = [this] { QueueCacheRefresh(); };
     arp_.onDuplicateIp = [this](const MacAddress& mac) { QueueDuplicate(mac); };
+    ni2_.notify = notify;
+    arp2_.notify = notify;
+    arp2_.onCacheChanged = [this] { QueueCacheRefresh(); };
 }
 
 BOOL CARPDlg::OnInitDialog() {
@@ -70,6 +85,7 @@ BOOL CARPDlg::OnInitDialog() {
     cacheList->InsertColumn(kCacheIp, L"IP Address", LVCFMT_LEFT, 130);
     cacheList->InsertColumn(kCacheMac, L"Ethernet Address", LVCFMT_LEFT, 150);
     cacheList->InsertColumn(kCacheState, L"Status", LVCFMT_LEFT, 80);
+    cacheList->InsertColumn(kCachePort, L"Port", LVCFMT_LEFT, 55);
 
     auto* proxyList = static_cast<CListCtrl*>(GetDlgItem(IDC_LIST_PROXY));
     proxyList->SetExtendedStyle(LVS_EX_FULLROWSELECT);
@@ -81,9 +97,23 @@ BOOL CARPDlg::OnInitDialog() {
 
     adapters_ = ni_.Enumerate();
     auto* adapterCombo = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_ADAPTER));
+    auto* adapter2 = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_ADAPTER2));
     for (const NetworkAdapter& adapter : adapters_) {
         adapterCombo->AddString(adapter.description.c_str());
+        adapter2->AddString(adapter.description.c_str());
     }
+    if (adapters_.size() > 1) { adapter2->SetCurSel(1); OnAdapter2(); }
+    auto* port = static_cast<CComboBox*>(GetDlgItem(IDC_ROUTE_PORT));
+    port->AddString(L"0"); port->AddString(L"1"); port->SetCurSel(0);
+    auto* flag = static_cast<CComboBox*>(GetDlgItem(IDC_ROUTE_FLAG));
+    flag->AddString(L"U"); flag->AddString(L"UG"); flag->SetCurSel(0);
+    auto* routes = static_cast<CListCtrl*>(GetDlgItem(IDC_ROUTE_LIST));
+    routes->SetExtendedStyle(LVS_EX_FULLROWSELECT);
+    routes->InsertColumn(0, L"Destination", LVCFMT_LEFT, 125);
+    routes->InsertColumn(1, L"Mask", LVCFMT_LEFT, 125);
+    routes->InsertColumn(2, L"Gateway", LVCFMT_LEFT, 125);
+    routes->InsertColumn(3, L"Port", LVCFMT_LEFT, 55);
+    routes->InsertColumn(4, L"Flag", LVCFMT_LEFT, 55);
 
     if (!adapters_.empty()) {
         adapterCombo->SetCurSel(0);
@@ -114,6 +144,8 @@ void CARPDlg::Ready(bool state) {
     GetDlgItem(IDC_COMBO_ADAPTER)->EnableWindow(!state);
     GetDlgItem(IDC_EDIT_SRC)->EnableWindow(!state);
     GetDlgItem(IDC_IP_SRC)->EnableWindow(!state);
+    GetDlgItem(IDC_COMBO_ADAPTER2)->EnableWindow(!state);
+    GetDlgItem(IDC_IP_SRC2)->EnableWindow(!state);
 
     SetDlgItemText(IDC_BUTTON_SELECT, state ? L"Reset" : L"Select");
 }
@@ -160,6 +192,16 @@ void CARPDlg::OnAdapter() {
     }
 }
 
+void CARPDlg::OnAdapter2() {
+    const int index = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_ADAPTER2))->GetCurSel();
+    if (index < 0 || index >= static_cast<int>(adapters_.size())) return;
+    const auto& adapter = adapters_[index];
+    SetDlgItemText(IDC_EDIT_SRC2, adapter.hasMac ? Wire::MacText(adapter.mac).c_str() : L"");
+    auto* control = static_cast<CIPAddressCtrl*>(GetDlgItem(IDC_IP_SRC2));
+    if (adapter.hasIp) control->SetAddress(adapter.ip[0], adapter.ip[1], adapter.ip[2], adapter.ip[3]);
+    else control->ClearAddress();
+}
+
 void CARPDlg::OnSelect() {
     if (ready_) {
         Disconnect();
@@ -197,15 +239,28 @@ void CARPDlg::OnSelect() {
         return;
     }
 
+    const int second = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_ADAPTER2))->GetCurSel();
+    IpAddress secondIp{};
+    if (second < 0 || second >= static_cast<int>(adapters_.size()) || second == selectedIndex ||
+        !adapters_[second].hasMac || !ReadIp(IDC_IP_SRC2, secondIp) || secondIp[0] == 0 || secondIp[0] >= 224 || secondIp == myIp) {
+        AfxMessageBox(L"Select two different wired adapters and enter a valid Port 1 IP.");
+        return;
+    }
     ethernet_.SetSourceAddress(source);
     ip_.SetSourceAddress(myIp);
     arp_.SetSourceAddress(source, myIp);
+    ethernet2_.SetSourceAddress(adapters_[second].mac);
+    arp2_.SetSourceAddress(adapters_[second].mac, secondIp);
+    router_.ports[0].ip = myIp;
+    router_.ports[1].ip = secondIp;
 
-    if (ni_.Open(adapter)) {
+    if (ni_.Open(adapter) && ni2_.Open(adapters_[second])) {
         Ready(true);
         SetDlgItemText(IDC_EDIT_GARP, Wire::MacText(source).c_str());
         Queue(L"주소 설정 완료: " + Wire::IpText(myIp) + L" / " + Wire::MacText(source));
     } else {
+        ni_.Close();
+        ni2_.Close();
         AfxMessageBox(L"장치를 열지 못했습니다. Npcap 설정을 확인하세요.");
     }
 }
@@ -236,13 +291,17 @@ void CARPDlg::OnArpDelete() {
         return;
     }
 
-    if (arp_.Remove(target)) {
+    auto* cacheList = static_cast<CListCtrl*>(GetDlgItem(IDC_LIST_ARP));
+    const int row = cacheList->GetNextItem(-1, LVNI_SELECTED);
+    CARPLayer& cache = cacheList->GetItemText(row, kCachePort) == L"1" ? arp2_ : arp_;
+    if (cache.Remove(target)) {
         Queue(L"ARP 캐시 항목 삭제: " + Wire::IpText(target));
     }
 }
 
 void CARPDlg::OnArpClear() {
     arp_.Clear();
+    arp2_.Clear();
     Queue(L"ARP 캐시 전체 삭제");
 }
 
@@ -317,6 +376,37 @@ void CARPDlg::OnTimer(UINT_PTR id) {
 
     // 수신 스레드가 멈춘 상태에서도 만료 항목을 정리한다.
     arp_.Expire(GetTickCount64());
+    arp2_.Expire(GetTickCount64());
+    router_.Flush();
+}
+
+void CARPDlg::OnRouteAdd() {
+    RouteEntry entry;
+    auto* flag = static_cast<CComboBox*>(GetDlgItem(IDC_ROUTE_FLAG));
+    entry.viaGateway = flag->GetCurSel() == 1;
+    entry.port = static_cast<CComboBox*>(GetDlgItem(IDC_ROUTE_PORT))->GetCurSel();
+    if (!ReadIp(IDC_ROUTE_DEST, entry.destination) || !ReadIp(IDC_ROUTE_MASK, entry.mask) ||
+        (entry.viaGateway && !ReadIp(IDC_ROUTE_GW, entry.gateway)) || !RouterCore::ValidRoute(entry)) {
+        AfxMessageBox(L"Check destination, contiguous netmask, gateway and interface.");
+        return;
+    }
+    routes_.push_back(entry);
+    router_.SetRoutes(routes_);
+    auto* list = static_cast<CListCtrl*>(GetDlgItem(IDC_ROUTE_LIST));
+    const int row = list->InsertItem(list->GetItemCount(), Wire::IpText(entry.destination).c_str());
+    list->SetItemText(row, 1, Wire::IpText(entry.mask).c_str());
+    list->SetItemText(row, 2, entry.viaGateway ? Wire::IpText(entry.gateway).c_str() : L"-");
+    list->SetItemText(row, 3, entry.port == 0 ? L"Port 0" : L"Port 1");
+    list->SetItemText(row, 4, entry.viaGateway ? L"UG" : L"U");
+}
+
+void CARPDlg::OnRouteDelete() {
+    auto* list = static_cast<CListCtrl*>(GetDlgItem(IDC_ROUTE_LIST));
+    const int row = list->GetNextItem(-1, LVNI_SELECTED);
+    if (row < 0 || row >= static_cast<int>(routes_.size())) return;
+    routes_.erase(routes_.begin() + row);
+    list->DeleteItem(row);
+    router_.SetRoutes(routes_);
 }
 
 void CARPDlg::RefreshCache() {
@@ -325,7 +415,10 @@ void CARPDlg::RefreshCache() {
     const CString selectedIp =
         selected >= 0 ? cacheList->GetItemText(selected, kCacheIp) : CString();
 
-    const std::vector<CARPLayer::CacheEntry> entries = arp_.Snapshot();
+    auto entries = arp_.Snapshot();
+    const size_t port0Count = entries.size();
+    const auto port1Entries = arp2_.Snapshot();
+    entries.insert(entries.end(), port1Entries.begin(), port1Entries.end());
 
     cacheList->SetRedraw(FALSE);
     cacheList->DeleteAllItems();
@@ -340,6 +433,7 @@ void CARPDlg::RefreshCache() {
             kCacheMac,
             complete ? Wire::MacText(entry.mac).c_str() : L"???????");
         cacheList->SetItemText(index, kCacheState, complete ? L"complete" : L"incomplete");
+        cacheList->SetItemText(index, kCachePort, static_cast<size_t>(index) < port0Count ? L"0" : L"1");
 
         if (selectedIp == ip.c_str()) {
             cacheList->SetItemState(index, LVIS_SELECTED, LVIS_SELECTED);
@@ -431,6 +525,10 @@ LRESULT CARPDlg::OnEvents(WPARAM, LPARAM) {
 
 void CARPDlg::Disconnect() {
     ni_.Close();
+    ni2_.Close();
+    router_.ClearPending();
+    arp_.Clear();
+    arp2_.Clear();
     Ready(false);
     SetWindowText(kTitle);
 }

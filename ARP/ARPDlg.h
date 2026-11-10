@@ -4,6 +4,7 @@
 #include "LayerManager.h"
 #include "IPLayer.h"
 #include "NILayer.h"
+#include "Router.h"
 
 class CARPDlg : public CDialogEx, public CBaseLayer {
 public:
@@ -21,6 +22,7 @@ protected:
 
     afx_msg void OnSelect();
     afx_msg void OnAdapter();
+    afx_msg void OnAdapter2();
     afx_msg void OnArpSend();
     afx_msg void OnArpDelete();
     afx_msg void OnArpClear();
@@ -28,6 +30,8 @@ protected:
     afx_msg void OnProxyDelete();
     afx_msg void OnGarpSend();
     afx_msg void OnTimer(UINT_PTR);
+    afx_msg void OnRouteAdd();
+    afx_msg void OnRouteDelete();
     afx_msg LRESULT OnEvents(WPARAM, LPARAM);
 
     DECLARE_MESSAGE_MAP()
@@ -48,6 +52,13 @@ private:
     CEthernetLayer ethernet_{"Ethernet"};
     CARPLayer arp_{"ARP"};
     CIPLayer ip_{"IP"};
+    CNILayer ni2_{"NI2"};
+    CEthernetLayer ethernet2_{"Ethernet2"};
+    CARPLayer arp2_{"ARP2"};
+    Router router_;
+    RouterInput input1_{"Router1", router_};
+    RouterInput input2_{"Router2", router_};
+    std::vector<RouteEntry> routes_;
 
     std::vector<NetworkAdapter> adapters_;
     bool ready_ = false;

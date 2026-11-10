@@ -25,6 +25,17 @@
 #define IDC_COMBO_PROXY_DEVICE          1014
 #define IDC_IP_PROXY                    1015
 #define IDC_EDIT_PROXY_MAC              1016
+#define IDC_COMBO_ADAPTER2              1100
+#define IDC_IP_SRC2                     1101
+#define IDC_ROUTE_DEST                  1102
+#define IDC_ROUTE_MASK                  1103
+#define IDC_ROUTE_GW                    1104
+#define IDC_ROUTE_PORT                  1105
+#define IDC_ROUTE_FLAG                  1106
+#define IDC_ROUTE_ADD                   1107
+#define IDC_ROUTE_DELETE                1108
+#define IDC_ROUTE_LIST                  1109
+#define IDC_EDIT_SRC2                   1110
 
 // Next default values for new objects
 // 

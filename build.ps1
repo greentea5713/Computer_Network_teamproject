@@ -12,12 +12,13 @@ if (!(Get-ChildItem "$vs\VC\Tools\MSVC\*\atlmfc\include\afxwin.h" -ErrorAction S
     throw 'MFC is missing. In Visual Studio Installer, add C++ MFC for v143 build tools (x86 & x64).'
 }
 $msbuild = Join-Path $vs 'MSBuild\Current\Bin\MSBuild.exe'
+$toolset = if (Test-Path "$vs\MSBuild\Microsoft\VC\v180\Platforms\Win32\PlatformToolsets\v145") { 'v145' } else { 'v143' }
 Push-Location $PSScriptRoot
 try {
-    & $msbuild .\ARP.sln /m /t:Build "/p:Configuration=$Configuration" /p:Platform=x86 /nologo /verbosity:minimal
+    & $msbuild .\ARP.sln /m /t:Build "/p:Configuration=$Configuration" /p:Platform=x86 "/p:PlatformToolset=$toolset" /nologo /verbosity:minimal
     if ($LASTEXITCODE -ne 0) { throw 'Application build failed.' }
     if ($Test) {
-        & $msbuild .\ARP\ProtocolTests.vcxproj /m /t:Build "/p:Configuration=$Configuration" /p:Platform=Win32 /nologo /verbosity:minimal
+        & $msbuild .\ARP\ProtocolTests.vcxproj /m /t:Build "/p:Configuration=$Configuration" /p:Platform=Win32 "/p:PlatformToolset=$toolset" /nologo /verbosity:minimal
         if ($LASTEXITCODE -ne 0) { throw 'Test build failed.' }
         & .\tests\bin\ProtocolTests.exe
         if ($LASTEXITCODE -ne 0) { throw 'Protocol tests failed.' }

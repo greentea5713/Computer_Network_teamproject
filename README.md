@@ -1,76 +1,31 @@
-# ARP (Practice 6, 7) — Basic ARP, Gratuitous ARP, Proxy ARP
+# Static Router
 
-File Transfer 프로젝트의 CBaseLayer 계층 구조(NI, Ethernet, Base, LayerManager)를 재사용하여 ARP 프로그램을 구현했습니다.
+Windows에서 Npcap을 이용해 Ethernet 인터페이스 두 개 사이에서 IPv4 패킷을 전달하는 MFC 실습 프로젝트입니다. 기존 ARP 구현을 활용하며, UI에서 포트 IP와 정적 경로를 입력합니다.
 
-> 브랜치: `arp` = ARP 프로그램(이 문서), `chat` = 기존 Ethernet 채팅/파일 전송 프로그램.
+- U 직접 연결 경로와 UG 게이트웨이 경로, 최장 접두사 검색
+- 포트별 ARP 캐시 및 다음 홉 주소 해석
+- IPv4 TTL 감소와 헤더 체크섬 재계산
+- 라우터 자신의 IP로 향하는 ping 응답 및 ICMP 오류 생성은 미구현
 
-## 열기 및 빌드
+## 실행
 
-- `ARP.sln`을 Visual Studio에서 열고 **Debug / x86**으로 빌드합니다.
-- Visual Studio 2022의 **MSVC v143 C++ 도구**, **C++ MFC (x86 및 x64)**, Windows SDK와 Npcap SDK가 필요합니다. Visual Studio Installer → 수정 → 개별 구성 요소에서 MFC를 추가할 수 있습니다.
-- `dependencies\npcap-sdk-1.16`에 준비한 SDK를 우선 사용하며, 없으면 `C:\WpdPack`을 사용합니다. 다른 위치는 `NpcapSdkDir` MSBuild 속성으로 지정할 수 있습니다. SDK 공식 배포: https://npcap.com/#download
-- 실행 PC에는 Npcap 드라이버가 필요합니다. **`run.cmd`를 더블 클릭**하면 설치된 Npcap DLL 경로를 적용하여 Debug x86 프로그램을 실행합니다. 실행 파일이 없으면 먼저 빌드합니다.
-- Visual Studio에서 F5로 실행할 때도 프로젝트의 디버깅 환경에 Npcap 경로가 적용됩니다.
-- x64 설정도 SDK의 `Lib\x64`를 사용하도록 구성했지만 실제 빌드 검증 대상은 Debug/Release x86입니다.
+실행 PC에는 [Npcap](https://npcap.com/#download)과 **x86 Visual C++ 재배포 패키지**, 서로 다른 유선 네트워크 인터페이스 두 개가 필요합니다. `Release/ARP.exe`가 없다면 아래 방법으로 먼저 빌드하세요. Npcap을 설치한 후 `run-router.cmd`를 실행하면 설치된 Npcap의 DLL 경로를 설정하고 라우터를 시작합니다.
 
-```powershell
-# MFC가 없을 때 추가 설치 (Windows 관리자 권한 확인 필요)
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-mfc.ps1
-# 앱 빌드
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
-# 앱 빌드 및 네트워크를 사용하지 않는 프로토콜 검사
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
-```
+저장소에 포함된 Npcap SDK는 빌드에 사용합니다. 실행에 필요한 Npcap 드라이버와 DLL은 Npcap 설치 프로그램이 설치합니다. 유선 포트 연결, 주소 입력과 ping 시험 방법은 [라우터 사용 안내](ROUTER_GUIDE.md)를 참고하세요.
 
-- `build.ps1`은 Visual Studio 2022 이상(18 Insiders 포함)의 v143 도구를 찾습니다.
+## 빌드
 
-## 계층 구조
+1. Visual Studio 2022 또는 2026에서 C++ 데스크톱 개발 도구, MFC 및 Windows SDK를 설치합니다.
+2. 저장소에 포함된 `dependencies/npcap-sdk-1.16`의 다음 파일을 확인합니다. 이 파일들이 없는 사본에서는 [Npcap 공식 배포 페이지](https://npcap.com/dist/)에서 `npcap-sdk-1.16.zip`을 내려받아 해당 경로에 압축을 풉니다.
+   - `dependencies/npcap-sdk-1.16/Include/pcap.h`
+   - `dependencies/npcap-sdk-1.16/Lib/wpcap.lib`
+   - `dependencies/npcap-sdk-1.16/Lib/Packet.lib`
+3. PowerShell에서 `./build.ps1 -Configuration Release -Test`를 실행합니다. 빌드 성공 시 `Release/ARP.exe`가 생성됩니다.
 
-```
-        Application (Dialog)
-               |
-       ARP     IP          ← IP는 주소 해석을 ARP에 요청
-          \   /
-        Ethernet           ← EtherType 분기: 0x0806 → ARP(0), 0x0800 → IP(1)
-            |
-            NI             ← 캡처 필터: ether proto 0x0806
-```
+다른 위치에 SDK가 있다면 PowerShell에서 `$env:NpcapSdkDir = 'SDK 경로'`를 설정하고 빌드할 수도 있습니다. 기본 프로젝트 구성은 Win32(x86)입니다.
 
-- 연결 문자열: `NI ( *Ethernet ( *ARP *IP ( +ARPDlg ) ) )`
-- `ARPLayer`(`ARPLayer.h/.cpp`): ARP 메시지 송수신, 캐시 테이블, GARP 송신, Proxy ARP 테이블. `ProxyAddDlg`: Proxy 항목 입력 창.
-- `IPLayer`(`IPLayer.h`): 자기 IP 보관, `Request`/`Resolve`로 ARP에 주소 해석 요청. IP 데이터그램 송수신은 라우팅 실습에서 확장합니다.
-- `EthernetLayer`: 목적지 MAC을 지정해 송신합니다. 자기 MAC 목적지와, ARP에 한해 브로드캐스트를 수신합니다. 자기 송신 프레임은 버립니다.
+## 확인 상태
 
-## ARP 메시지와 동작
+프로토콜 자동 검사는 실제 NIC를 열지 않습니다. 실기기 환경에서는 유선 인터페이스 두 개와 양쪽 호스트를 연결해 양방향 ping 및 Wireshark 캡처를 별도로 확인해야 합니다.
 
-- 28바이트: hard type 1 / prot type 0x0800 / hard size 6 / prot size 4 / op (1 요청, 2 응답) / sender MAC·IP / target MAC·IP. Ethernet 최소 길이 60바이트로 패딩합니다.
-- **요청**: 목적지 MAC 브로드캐스트, target MAC 0. 캐시에 없으면 `incomplete` 항목을 만듭니다.
-- **요청 수신**: target IP가 내 IP이면 송신자를 캐시에 추가/갱신하고 sender/target을 바꿔(SWAPPING) 유니캐스트로 응답합니다. 내 IP가 아니면 응답하지 않고, 캐시에 이미 있는 송신자만 갱신합니다(RFC 826 merge).
-- **응답 수신**: 송신자 매핑을 `complete`로 추가/갱신합니다.
-- **캐시 테이블**: IP 주소를 키로 하는 해시 테이블(`std::unordered_map`, IPv4 4바이트를 32비트 정수로 묶어 해시)입니다. 화면에는 IP 순으로 정렬해 표시합니다.
-- **캐시 만료**: complete 20분, incomplete 3분. NI 수신 스레드의 `OnIdle`과 UI 1초 타이머에서 정리합니다.
-- **Gratuitous ARP**: H/W 주소 칸의 MAC을 내 MAC으로 바꾼 뒤(NIC 교체 상황) sender IP = target IP = 내 IP인 요청을 브로드캐스트합니다. 이 IP를 캐시에 가진 호스트는 새 MAC으로 갱신하고 응답하지 않습니다. 응답이 오면 다른 호스트가 같은 IP를 쓰는 것이므로 `duplicate IP address sent from Ethernet address: xx:xx:xx:xx:xx:xx`를 메시지 상자로 알립니다. 내 IP에 대한 GARP를 받은 쪽도 응답하고 같은 경고를 띄웁니다.
-- **Proxy ARP**: Proxy ARP 테이블(Device, IP Address, Ethernet Address, 해시 테이블)을 둡니다. 요청의 target IP가 내 IP가 아니면 테이블을 찾아, 항목이 있으면 그 항목의 Ethernet 주소를 sender MAC으로, 그 IP를 sender IP로 넣어 응답하고 요청자를 캐시에 추가/갱신합니다. Ethernet 프레임 출발지는 내 NIC MAC입니다. GARP(sender IP == target IP)에는 대신 응답하지 않습니다.
-- 디자인에 로그 영역이 없어 최근 상태 메시지(요청/응답 송수신 등)는 창 제목 표시줄에 표시합니다.
-
-## 실행 (Host A ↔ Host B)
-
-1. 하단에서 어댑터를 선택합니다. MAC과 IP가 어댑터 값으로 채워지며 IP는 수정할 수 있습니다(예: A `168.188.129.63`, B `168.188.129.2`). **Select**를 누릅니다(다시 누르면 Reset).
-2. Host A: ARP Cache 아래 IP 칸에 B의 IP를 입력하고 **Send**(또는 Enter). A의 캐시에 `incomplete` 항목이 생깁니다.
-3. Host B는 요청을 받아 A를 캐시에 추가하고 응답합니다. A의 항목이 `complete`와 B의 MAC으로 바뀝니다.
-4. **Item Delete**/**All Delete**로 캐시를 삭제합니다.
-5. GARP: Host B가 A를 캐시에 가진 상태에서, Host A의 H/W 주소 칸(Select 시 내 MAC으로 채워짐)을 다른 MAC으로 바꾸고 **Send**. B의 캐시에서 A 항목의 MAC이 바뀝니다.
-6. Proxy ARP: Host B에서 **Add** → Device 선택(그 장치의 MAC이 Ethernet Address에 채워짐, 수정 가능), 대신 응답할 IP 입력 → OK. Host A가 그 IP로 ARP 요청을 보내면 B가 응답하고 A의 캐시에 그 IP와 항목의 Ethernet 주소가 추가됩니다. **Delete**로 항목을 지웁니다.
-7. Wireshark 표시 필터: `arp`.
-
-- PC의 실제 IP를 내 IP로 쓰면 Windows도 같은 요청에 응답하여 응답이 두 개 보일 수 있습니다. 실습 토폴로지처럼 사용하지 않는 IP를 지정하면 이 프로그램만 응답합니다.
-
-## 검증 및 한계
-
-- `build.ps1 -Test`: 실제 NIC 없이 모의 하위 계층으로 검사합니다(`tests/ProtocolTests.cpp`). 계층 연결, ARP 요청/응답 필드, 브로드캐스트 수신, SWAPPING, Ethernet 필터, 캐시 추가·갱신·만료·삭제, 해시 테이블 저장·검색, GARP 송수신·캐시 갱신·IP 중복 감지, Proxy ARP 응답·추가·삭제. 2026-10-13 Debug x86 빌드와 검사 **96개 통과**.
-- 실행 화면 배치를 과제 디자인과 대조했습니다. 실제 두 PC 사이의 ARP/GARP/Proxy ARP 교환은 아직 실행하지 않았습니다.
-- ARP 요청 재전송은 하지 않습니다. 응답이 없으면 incomplete 항목이 3분 뒤 삭제됩니다.
-
-## 보고서 제출 전
-
-조원/학번, 실제 실습 일시·장소를 채우고 프로그램 결과 화면 및 Wireshark 캡처를 추가하세요. 미실행 상태에서 실제 성공한 실험처럼 기술하지 않았습니다.
+`Release` 폴더의 실행 파일과 DLL, 빌드 중간 파일은 Git에 포함되지 않습니다.
