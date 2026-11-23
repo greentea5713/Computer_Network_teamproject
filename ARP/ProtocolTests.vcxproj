@@ -146,6 +146,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <Midl>
@@ -172,6 +173,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <Midl>
@@ -228,6 +230,7 @@
   </ItemGroup>
   <PropertyGroup>
     <NpcapSdkDir Condition="'$(NpcapSdkDir)'=='' and Exists('$(ProjectDir)..\dependencies\npcap-sdk-1.16\Include\pcap.h')">$(ProjectDir)..\dependencies\npcap-sdk-1.16</NpcapSdkDir>
+    <NpcapSdkDir Condition="'$(NpcapSdkDir)'=='' and Exists('$(ProjectDir)..\..\dependencies\npcap-sdk-1.16\Include\pcap.h')">$(ProjectDir)..\..\dependencies\npcap-sdk-1.16</NpcapSdkDir>
     <NpcapSdkDir Condition="'$(NpcapSdkDir)'==''">C:\WpdPack</NpcapSdkDir>
     <IncludePath>$(NpcapSdkDir)\Include;$(IncludePath)</IncludePath>
     <LibraryPath Condition="'$(Platform)'=='Win32'">$(NpcapSdkDir)\Lib;$(LibraryPath)</LibraryPath>

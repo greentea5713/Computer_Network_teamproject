@@ -11,7 +11,8 @@ if (!$vs) { throw 'Visual Studio 2022 or later C++ build tools were not found.' 
 if (!(Get-ChildItem "$vs\VC\Tools\MSVC\*\atlmfc\include\afxwin.h" -ErrorAction SilentlyContinue)) {
     throw 'MFC is missing. In Visual Studio Installer, add C++ MFC for v143 build tools (x86 & x64).'
 }
-$msbuild = Join-Path $vs 'MSBuild\Current\Bin\MSBuild.exe'
+$msbuild = Join-Path $vs 'MSBuild\Current\Bin\amd64\MSBuild.exe'
+if (!(Test-Path $msbuild)) { $msbuild = Join-Path $vs 'MSBuild\Current\Bin\MSBuild.exe' }
 $toolset = if (Test-Path "$vs\MSBuild\Microsoft\VC\v180\Platforms\Win32\PlatformToolsets\v145") { 'v145' } else { 'v143' }
 Push-Location $PSScriptRoot
 try {

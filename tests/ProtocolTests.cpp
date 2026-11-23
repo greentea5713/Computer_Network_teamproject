@@ -2,6 +2,7 @@
 #include "LayerManager.h"
 #include "IPLayer.h"
 #include "RouterCore.h"
+#include "NatCore.h"
 #include <iostream>
 static int checks=0;
 void Require(bool condition,const char* text) { if(!condition) throw std::runtime_error(text); ++checks; }
@@ -11,8 +12,144 @@ public:
     std::vector<std::vector<unsigned char>> packets;
     BOOL Send(unsigned char* p,int n) override { packets.emplace_back(p,p+n); return TRUE; }
 };
+
+// Independent reference checksum over the TCP/UDP pseudo-header and payload.
+uint16_t ReferenceTransport(const std::vector<unsigned char>& packet) {
+    const size_t header = (packet[0] & 15) * 4;
+    std::vector<unsigned char> bytes;
+    if (packet[9] != NatCore::Icmp) {
+        bytes.assign(packet.begin() + 12, packet.begin() + 20);
+        bytes.insert(bytes.end(), {0, packet[9], 0, 0});
+        Wire::Write16(bytes.data() + 10, static_cast<uint16_t>(packet.size() - header));
+    }
+    bytes.insert(bytes.end(), packet.begin() + header, packet.end());
+    return RouterCore::Checksum(bytes.data(), bytes.size());
+}
+
+std::vector<unsigned char> Datagram(unsigned char protocol, const IpAddress& src, const IpAddress& dst,
+                                    uint16_t from, uint16_t to, unsigned char typeOrFlags) {
+    constexpr size_t header = 24; // Include options and an odd transport length.
+    const size_t payloadHeader = protocol == NatCore::Tcp ? 20 : 8;
+    std::vector<unsigned char> packet(header + payloadHeader + 1);
+    packet[0] = 0x46;
+    packet[8] = 128;
+    packet[9] = protocol;
+    Wire::Write16(packet.data() + 2, static_cast<uint16_t>(packet.size()));
+    std::copy(src.begin(), src.end(), packet.begin() + 12);
+    std::copy(dst.begin(), dst.end(), packet.begin() + 16);
+    auto* payload = packet.data() + header;
+    auto* checksum = payload + 2;
+    if (protocol == NatCore::Icmp) {
+        payload[0] = typeOrFlags;
+        Wire::Write16(payload + 4, from);
+        Wire::Write16(payload + 6, 123);
+    } else {
+        Wire::Write16(payload, from);
+        Wire::Write16(payload + 2, to);
+        if (protocol == NatCore::Tcp) {
+            payload[12] = 0x50;
+            payload[13] = typeOrFlags;
+            checksum = payload + 16;
+        } else {
+            Wire::Write16(payload + 4, static_cast<uint16_t>(payloadHeader + 1));
+            checksum = payload + 6;
+        }
+    }
+    packet.back() = 0xa7;
+    const auto value = ReferenceTransport(packet);
+    Wire::Write16(checksum, protocol == NatCore::Udp && !value ? 0xffff : value);
+    Wire::Write16(packet.data() + 10, RouterCore::Checksum(packet.data(), header));
+    return packet;
+}
+
+void TestNat() {
+    using namespace NatCore;
+    const IpAddress lan{192,168,42,1}, wan{10,42,0,2}, host{192,168,42,10},
+        second{192,168,42,11}, remote{172,16,42,10}, other{172,16,42,11}, gateway{10,42,0,1};
+    const std::vector<RouteEntry> routes{
+        {{192,168,42,0},{255,255,255,0},{},Inside,false},
+        {{172,16,42,0},{255,255,255,0},gateway,Outside,true}
+    };
+    std::vector<unsigned char> result;
+    IpAddress destination{};
+    RouteEntry route;
+    uint64_t now = 0;
+    Table nat;
+    const auto send = [&](int ingress, const auto& packet) {
+        if (!RouterCore::Prepare(packet.data(), packet.size(), result) ||
+            !nat.Forward(result, ingress, lan, wan, routes, now, route, destination)) return false;
+        Require(result[8] == 127 && result.back() == 0xa7 &&
+                RouterCore::Checksum(result.data(), 24) == 0, "NAT preserves payload and IPv4 options, updates TTL/checksum");
+        if (result[9] != Udp || Wire::Read16(result.data() + 30)) {
+            Require(ReferenceTransport(result) == 0, "NAT checksum verifies with independent pseudo-header");
+        }
+        return true;
+    };
+    const auto value = [&](int offset) { return Wire::Read16(result.data() + 24 + offset); };
+    Require(send(Inside, Datagram(Icmp, host, remote, 7, 0, 8)) &&
+            Address(result.data() + 12) == wan && route.viaGateway && route.gateway == gateway,
+            "outbound ICMP with Cisco gateway");
+    const auto id = value(4);
+    Require(id != 7 && value(6) == 123, "replace Identifier, preserve echo sequence");
+    Require(send(Inside, Datagram(Icmp, second, remote, 7, 0, 8)) && value(4) != id,
+            "two hosts sharing ICMP Identifier obtain distinct external IDs");
+    Require(send(Inside, Datagram(Icmp, host, remote, 7, 0, 8)) && value(4) == id,
+            "repeat echo reuses mapping");
+    now = ShortIdleMs - 1;
+    Require(send(Outside, Datagram(Icmp, remote, wan, id, 0, 0)) &&
+            destination == host && route.port == Inside && Address(result.data() + 16) == host &&
+            value(4) == 7 && value(6) == 123, "inbound echo is restored and routed after DNAT");
+    now += 2;
+    nat.Expire(now);
+    Require(nat.Mappings().size() == 1, "reply refreshes only the matching timer");
+    now += ShortIdleMs;
+    Require(!send(Outside, Datagram(Icmp, remote, wan, id, 0, 0)) && nat.Mappings().empty(),
+            "late reply rejected after expiration");
+    Require(!send(Outside, Datagram(Icmp, remote, host, 1, 0, 8)),
+            "unsolicited direct access to inside rejected");
+
+    for (const auto protocol : {Tcp, Udp}) {
+        Require(send(Inside, Datagram(protocol, host, remote, 12345, 8080, 2)) &&
+                Address(result.data() + 12) == wan && value(2) == 8080, "outbound TCP/UDP translation");
+        const auto external = value(0);
+        Require(send(Inside, Datagram(protocol, second, remote, 12345, 8080, 2)) && value(0) != external,
+                "TCP/UDP source port collision avoided");
+        Require(!send(Outside, Datagram(protocol, other, wan, 8080, external, 0x12)),
+                "unrelated peer cannot use dynamic TCP/UDP mapping");
+        Require(send(Outside, Datagram(protocol, remote, wan, 8080, external, 0x12)) &&
+                destination == host && value(2) == 12345, "TCP/UDP reply restores original endpoint");
+        Require(!nat.AddRule({protocol, external, host, 9000}), "rule cannot overwrite live dynamic port");
+        Require(nat.AddRule({protocol, 8090, host, 9000}) &&
+                !nat.AddRule({protocol, 8090, second, 9001}), "forwarding rule and conflict");
+        if (protocol == Tcp) {
+            Require(!send(Outside, Datagram(Tcp, remote, wan, 47000, 8090, 0x10)),
+                    "first forwarded TCP segment must be SYN");
+        }
+        Require(send(Outside, Datagram(protocol, remote, wan, 47000, 8090, 2)) &&
+                destination == host && value(2) == 9000, "forward external port to inside service");
+        Require(send(Inside, Datagram(protocol, host, remote, 9000, 47000, 0x12)) &&
+                Address(result.data() + 12) == wan && value(0) == 8090,
+                "reply uses advertised forwarding port without allocating another mapping");
+        nat.DeleteRule(protocol, 8090);
+        Require(!send(Outside, Datagram(protocol, remote, wan, 47000, 8090, 2)),
+                "deleting rule revokes inbound forwarding");
+    }
+    auto uncheckedUdp = Datagram(Udp, host, remote, 14000, 8080, 0);
+    Wire::Write16(uncheckedUdp.data() + 30, 0);
+    Require(send(Inside, uncheckedUdp) && value(6) == 0, "preserve intentionally absent IPv4 UDP checksum");
+    auto damaged = Datagram(Tcp, host, remote, 12345, 8080, 2);
+    damaged.back() ^= 1;
+    Require(!send(Inside, damaged), "reject damaged transport payload");
+    auto fragment = Datagram(Udp, host, remote, 12345, 8080, 0);
+    Wire::Write16(fragment.data() + 6, 0x2000);
+    Wire::Write16(fragment.data() + 10, 0);
+    Wire::Write16(fragment.data() + 10, RouterCore::Checksum(fragment.data(), 24));
+    Require(!send(Inside, fragment), "reject fragmented datagram at the NAT boundary");
+}
+
 int main() {
     try {
+        TestNat();
         {
             RouteEntry def{{0,0,0,0},{0,0,0,0},{10,0,0,1},1,true};
             RouteEntry direct{{192,168,1,0},{255,255,255,0},{},0,false};

@@ -8,7 +8,13 @@ constexpr UINT WM_NETWORK_EVENT = WM_APP + 17;
 constexpr size_t kMaximumQueuedEvents = 1000;
 constexpr UINT_PTR kCacheTimer = 1;
 constexpr UINT kCacheTimerMs = 1000;
-constexpr wchar_t kTitle[] = L"Router";
+constexpr wchar_t kTitle[] = L"NAT Router";
+
+const wchar_t* ProtocolName(unsigned char protocol) {
+    if (protocol == NatCore::Tcp) return L"TCP";
+    if (protocol == NatCore::Udp) return L"UDP";
+    return L"ICMP";
+}
 
 enum CacheColumn {
     kCacheIp,
@@ -28,6 +34,8 @@ BEGIN_MESSAGE_MAP(CARPDlg, CDialogEx)
     ON_BN_CLICKED(IDC_BUTTON_SELECT, &CARPDlg::OnSelect)
     ON_BN_CLICKED(IDC_ROUTE_ADD, &CARPDlg::OnRouteAdd)
     ON_BN_CLICKED(IDC_ROUTE_DELETE, &CARPDlg::OnRouteDelete)
+    ON_BN_CLICKED(IDC_FORWARD_ADD, &CARPDlg::OnForwardAdd)
+    ON_BN_CLICKED(IDC_FORWARD_DELETE, &CARPDlg::OnForwardDelete)
     ON_BN_CLICKED(IDC_BUTTON_ARP_SEND, &CARPDlg::OnArpSend)
     ON_BN_CLICKED(IDC_BUTTON_ARP_DELETE, &CARPDlg::OnArpDelete)
     ON_BN_CLICKED(IDC_BUTTON_ARP_CLEAR, &CARPDlg::OnArpClear)
@@ -104,7 +112,7 @@ BOOL CARPDlg::OnInitDialog() {
     }
     if (adapters_.size() > 1) { adapter2->SetCurSel(1); OnAdapter2(); }
     auto* port = static_cast<CComboBox*>(GetDlgItem(IDC_ROUTE_PORT));
-    port->AddString(L"0"); port->AddString(L"1"); port->SetCurSel(0);
+    port->AddString(L"Port 1"); port->AddString(L"Port 2"); port->SetCurSel(0);
     auto* flag = static_cast<CComboBox*>(GetDlgItem(IDC_ROUTE_FLAG));
     flag->AddString(L"U"); flag->AddString(L"UG"); flag->SetCurSel(0);
     auto* routes = static_cast<CListCtrl*>(GetDlgItem(IDC_ROUTE_LIST));
@@ -114,6 +122,26 @@ BOOL CARPDlg::OnInitDialog() {
     routes->InsertColumn(2, L"Gateway", LVCFMT_LEFT, 125);
     routes->InsertColumn(3, L"Port", LVCFMT_LEFT, 55);
     routes->InsertColumn(4, L"Flag", LVCFMT_LEFT, 55);
+
+    auto* nat = static_cast<CListCtrl*>(GetDlgItem(IDC_NAT_LIST));
+    nat->SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+    nat->InsertColumn(0, L"Proto", LVCFMT_LEFT, 47);
+    nat->InsertColumn(1, L"Inside IP", LVCFMT_LEFT, 101);
+    nat->InsertColumn(2, L"ID/Port", LVCFMT_RIGHT, 53);
+    nat->InsertColumn(3, L"Outside IP", LVCFMT_LEFT, 101);
+    nat->InsertColumn(4, L"ID/Port", LVCFMT_RIGHT, 53);
+    nat->InsertColumn(5, L"Timer (s)", LVCFMT_RIGHT, 59);
+    nat->InsertColumn(6, L"Mode", LVCFMT_LEFT, 61);
+    auto* rules = static_cast<CListCtrl*>(GetDlgItem(IDC_FORWARD_LIST));
+    rules->SetExtendedStyle(LVS_EX_FULLROWSELECT);
+    rules->InsertColumn(0, L"Proto", LVCFMT_LEFT, 48);
+    rules->InsertColumn(1, L"Outside port", LVCFMT_RIGHT, 82);
+    rules->InsertColumn(2, L"Inside IP", LVCFMT_LEFT, 113);
+    rules->InsertColumn(3, L"Inside port", LVCFMT_RIGHT, 78);
+    auto* protocol = static_cast<CComboBox*>(GetDlgItem(IDC_FORWARD_PROTOCOL));
+    protocol->AddString(L"TCP");
+    protocol->AddString(L"UDP");
+    protocol->SetCurSel(0);
 
     if (!adapters_.empty()) {
         adapterCombo->SetCurSel(0);
@@ -243,7 +271,7 @@ void CARPDlg::OnSelect() {
     IpAddress secondIp{};
     if (second < 0 || second >= static_cast<int>(adapters_.size()) || second == selectedIndex ||
         !adapters_[second].hasMac || !ReadIp(IDC_IP_SRC2, secondIp) || secondIp[0] == 0 || secondIp[0] >= 224 || secondIp == myIp) {
-        AfxMessageBox(L"Select two different wired adapters and enter a valid Port 1 IP.");
+        AfxMessageBox(L"Select two different wired adapters and enter a valid Port 2 IP.");
         return;
     }
     ethernet_.SetSourceAddress(source);
@@ -293,7 +321,7 @@ void CARPDlg::OnArpDelete() {
 
     auto* cacheList = static_cast<CListCtrl*>(GetDlgItem(IDC_LIST_ARP));
     const int row = cacheList->GetNextItem(-1, LVNI_SELECTED);
-    CARPLayer& cache = cacheList->GetItemText(row, kCachePort) == L"1" ? arp2_ : arp_;
+    CARPLayer& cache = cacheList->GetItemText(row, kCachePort) == L"2" ? arp2_ : arp_;
     if (cache.Remove(target)) {
         Queue(L"ARP 캐시 항목 삭제: " + Wire::IpText(target));
     }
@@ -378,6 +406,63 @@ void CARPDlg::OnTimer(UINT_PTR id) {
     arp_.Expire(GetTickCount64());
     arp2_.Expire(GetTickCount64());
     router_.Flush();
+    RefreshNat();
+}
+
+void CARPDlg::RefreshNat() {
+    const auto mappings = router_.NatSnapshot();
+    const auto now = GetTickCount64();
+    auto* list = static_cast<CListCtrl*>(GetDlgItem(IDC_NAT_LIST));
+    list->SetRedraw(FALSE);
+    list->DeleteAllItems();
+    for (const auto& mapping : mappings) {
+        const int row = list->InsertItem(list->GetItemCount(), ProtocolName(mapping.protocol));
+        list->SetItemText(row, 1, Wire::IpText(mapping.insideIp).c_str());
+        list->SetItemText(row, 2, std::to_wstring(mapping.inside).c_str());
+        list->SetItemText(row, 3, Wire::IpText(router_.ports[NatCore::Outside].ip).c_str());
+        list->SetItemText(row, 4, std::to_wstring(mapping.outside).c_str());
+        const auto seconds = mapping.expires > now ? (mapping.expires - now + 999) / 1000 : 0;
+        list->SetItemText(row, 5, std::to_wstring(seconds).c_str());
+        list->SetItemText(row, 6, mapping.forwarded ? L"Forward" : L"NAPT");
+    }
+    list->SetRedraw(TRUE);
+    list->Invalidate(FALSE);
+}
+
+void CARPDlg::OnForwardAdd() {
+    BOOL outsideOk = FALSE, insideOk = FALSE;
+    const UINT outside = GetDlgItemInt(IDC_FORWARD_OUTSIDE, &outsideOk, FALSE);
+    const UINT inside = GetDlgItemInt(IDC_FORWARD_INSIDE, &insideOk, FALSE);
+    const int protocol = static_cast<CComboBox*>(GetDlgItem(IDC_FORWARD_PROTOCOL))->GetCurSel();
+    IpAddress ip{};
+    if (protocol < 0 || !outsideOk || !insideOk || outside == 0 || outside > 65535 ||
+        inside == 0 || inside > 65535 || !ReadIp(IDC_FORWARD_IP, ip) || !NatCore::Unicast(ip)) {
+        AfxMessageBox(L"Enter a valid Inside IP and TCP/UDP port numbers from 1 to 65535.");
+        return;
+    }
+    NatCore::Rule rule{protocol == 0 ? NatCore::Tcp : NatCore::Udp,
+                       static_cast<uint16_t>(outside), ip, static_cast<uint16_t>(inside)};
+    if (!router_.AddForward(rule)) {
+        AfxMessageBox(L"The port or inside endpoint is already in use, or the rule table is full.");
+        return;
+    }
+    forwardRules_.push_back(rule);
+    auto* list = static_cast<CListCtrl*>(GetDlgItem(IDC_FORWARD_LIST));
+    const int row = list->InsertItem(list->GetItemCount(), ProtocolName(rule.protocol));
+    list->SetItemText(row, 1, std::to_wstring(rule.outside).c_str());
+    list->SetItemText(row, 2, Wire::IpText(rule.insideIp).c_str());
+    list->SetItemText(row, 3, std::to_wstring(rule.inside).c_str());
+}
+
+void CARPDlg::OnForwardDelete() {
+    auto* list = static_cast<CListCtrl*>(GetDlgItem(IDC_FORWARD_LIST));
+    const int row = list->GetNextItem(-1, LVNI_SELECTED);
+    if (row < 0 || row >= static_cast<int>(forwardRules_.size())) return;
+    const auto rule = forwardRules_[row];
+    router_.DeleteForward(rule.protocol, rule.outside);
+    forwardRules_.erase(forwardRules_.begin() + row);
+    list->DeleteItem(row);
+    RefreshNat();
 }
 
 void CARPDlg::OnRouteAdd() {
@@ -396,7 +481,7 @@ void CARPDlg::OnRouteAdd() {
     const int row = list->InsertItem(list->GetItemCount(), Wire::IpText(entry.destination).c_str());
     list->SetItemText(row, 1, Wire::IpText(entry.mask).c_str());
     list->SetItemText(row, 2, entry.viaGateway ? Wire::IpText(entry.gateway).c_str() : L"-");
-    list->SetItemText(row, 3, entry.port == 0 ? L"Port 0" : L"Port 1");
+    list->SetItemText(row, 3, entry.port == NatCore::Inside ? L"Port 1" : L"Port 2");
     list->SetItemText(row, 4, entry.viaGateway ? L"UG" : L"U");
 }
 
@@ -416,7 +501,7 @@ void CARPDlg::RefreshCache() {
         selected >= 0 ? cacheList->GetItemText(selected, kCacheIp) : CString();
 
     auto entries = arp_.Snapshot();
-    const size_t port0Count = entries.size();
+    const size_t insideCount = entries.size();
     const auto port1Entries = arp2_.Snapshot();
     entries.insert(entries.end(), port1Entries.begin(), port1Entries.end());
 
@@ -433,7 +518,7 @@ void CARPDlg::RefreshCache() {
             kCacheMac,
             complete ? Wire::MacText(entry.mac).c_str() : L"???????");
         cacheList->SetItemText(index, kCacheState, complete ? L"complete" : L"incomplete");
-        cacheList->SetItemText(index, kCachePort, static_cast<size_t>(index) < port0Count ? L"0" : L"1");
+        cacheList->SetItemText(index, kCachePort, static_cast<size_t>(index) < insideCount ? L"1" : L"2");
 
         if (selectedIp == ip.c_str()) {
             cacheList->SetItemState(index, LVIS_SELECTED, LVIS_SELECTED);
@@ -526,7 +611,8 @@ LRESULT CARPDlg::OnEvents(WPARAM, LPARAM) {
 void CARPDlg::Disconnect() {
     ni_.Close();
     ni2_.Close();
-    router_.ClearPending();
+    router_.Reset();
+    RefreshNat();
     arp_.Clear();
     arp2_.Clear();
     Ready(false);

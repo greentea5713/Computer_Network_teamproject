@@ -36,6 +36,14 @@
 #define IDC_ROUTE_DELETE                1108
 #define IDC_ROUTE_LIST                  1109
 #define IDC_EDIT_SRC2                   1110
+#define IDC_NAT_LIST                    1120
+#define IDC_FORWARD_LIST                1121
+#define IDC_FORWARD_PROTOCOL            1122
+#define IDC_FORWARD_OUTSIDE             1123
+#define IDC_FORWARD_IP                  1124
+#define IDC_FORWARD_INSIDE              1125
+#define IDC_FORWARD_ADD                 1126
+#define IDC_FORWARD_DELETE              1127
 
 // Next default values for new objects
 // 

@@ -32,6 +32,8 @@ protected:
     afx_msg void OnTimer(UINT_PTR);
     afx_msg void OnRouteAdd();
     afx_msg void OnRouteDelete();
+    afx_msg void OnForwardAdd();
+    afx_msg void OnForwardDelete();
     afx_msg LRESULT OnEvents(WPARAM, LPARAM);
 
     DECLARE_MESSAGE_MAP()
@@ -42,6 +44,7 @@ private:
     void QueueDuplicate(const MacAddress&);
     void RefreshCache();
     void RefreshProxy();
+    void RefreshNat();
     bool ReadIp(int control, IpAddress&);
     bool SelectedIp(IpAddress&);
     void Ready(bool);
@@ -56,9 +59,10 @@ private:
     CEthernetLayer ethernet2_{"Ethernet2"};
     CARPLayer arp2_{"ARP2"};
     Router router_;
-    RouterInput input1_{"Router1", router_};
-    RouterInput input2_{"Router2", router_};
+    RouterInput input1_{"Router1", router_, NatCore::Inside};
+    RouterInput input2_{"Router2", router_, NatCore::Outside};
     std::vector<RouteEntry> routes_;
+    std::vector<NatCore::Rule> forwardRules_;
 
     std::vector<NetworkAdapter> adapters_;
     bool ready_ = false;

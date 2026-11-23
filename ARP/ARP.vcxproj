@@ -146,6 +146,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <Midl>
@@ -172,6 +173,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <Midl>
@@ -201,6 +203,7 @@
     <ClInclude Include="IPLayer.h" />
     <ClInclude Include="RouterCore.h" />
     <ClInclude Include="Router.h" />
+    <ClInclude Include="NatCore.h" />
     <ClInclude Include="ProxyAddDlg.h" />
   </ItemGroup>
   <ItemGroup>
@@ -231,6 +234,7 @@
   </ItemGroup>
   <PropertyGroup>
     <NpcapSdkDir Condition="'$(NpcapSdkDir)'=='' and Exists('$(ProjectDir)..\dependencies\npcap-sdk-1.16\Include\pcap.h')">$(ProjectDir)..\dependencies\npcap-sdk-1.16</NpcapSdkDir>
+    <NpcapSdkDir Condition="'$(NpcapSdkDir)'=='' and Exists('$(ProjectDir)..\..\dependencies\npcap-sdk-1.16\Include\pcap.h')">$(ProjectDir)..\..\dependencies\npcap-sdk-1.16</NpcapSdkDir>
     <NpcapSdkDir Condition="'$(NpcapSdkDir)'==''">C:\WpdPack</NpcapSdkDir>
     <IncludePath>$(NpcapSdkDir)\Include;$(IncludePath)</IncludePath>
     <LibraryPath Condition="'$(Platform)'=='Win32'">$(NpcapSdkDir)\Lib;$(LibraryPath)</LibraryPath>
