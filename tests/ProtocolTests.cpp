@@ -42,7 +42,7 @@ std::vector<unsigned char> Datagram(unsigned char protocol, const IpAddress& src
     if (protocol == NatCore::Icmp) {
         payload[0] = typeOrFlags;
         Wire::Write16(payload + 4, from);
-        Wire::Write16(payload + 6, 123);
+        Wire::Write16(payload + 6, to);
     } else {
         Wire::Write16(payload, from);
         Wire::Write16(payload + 2, to);
@@ -86,17 +86,18 @@ void TestNat() {
         return true;
     };
     const auto value = [&](int offset) { return Wire::Read16(result.data() + 24 + offset); };
-    Require(send(Inside, Datagram(Icmp, host, remote, 7, 0, 8)) &&
+    Require(send(Inside, Datagram(Icmp, host, remote, 7, 123, 8)) &&
             Address(result.data() + 12) == wan && route.viaGateway && route.gateway == gateway,
             "outbound ICMP with Cisco gateway");
     const auto id = value(4);
     Require(id != 7 && value(6) == 123, "replace Identifier, preserve echo sequence");
     Require(send(Inside, Datagram(Icmp, second, remote, 7, 0, 8)) && value(4) != id,
             "two hosts sharing ICMP Identifier obtain distinct external IDs");
-    Require(send(Inside, Datagram(Icmp, host, remote, 7, 0, 8)) && value(4) == id,
-            "repeat echo reuses mapping");
+    Require(send(Inside, Datagram(Icmp, host, remote, 7, 124, 8)) && value(4) == id &&
+            value(6) == 124 && nat.Mappings().size() == 2,
+            "consecutive requests from a single ping reuse mapping and preserve sequence");
     now = ShortIdleMs - 1;
-    Require(send(Outside, Datagram(Icmp, remote, wan, id, 0, 0)) &&
+    Require(send(Outside, Datagram(Icmp, remote, wan, id, 123, 0)) &&
             destination == host && route.port == Inside && Address(result.data() + 16) == host &&
             value(4) == 7 && value(6) == 123, "inbound echo is restored and routed after DNAT");
     now += 2;
@@ -107,6 +108,28 @@ void TestNat() {
             "late reply rejected after expiration");
     Require(!send(Outside, Datagram(Icmp, remote, host, 1, 0, 8)),
             "unsolicited direct access to inside rejected");
+
+    Require(send(Inside, Datagram(Icmp, host, remote, 7, 1, 8)), "first ping run");
+    const auto firstRun = value(4);
+    const auto firstDeadline = nat.Mappings().front().expires;
+    now += 1000;
+    Require(send(Inside, Datagram(Icmp, host, remote, 7, 1, 8)) && value(4) != firstRun &&
+            nat.Mappings().size() == 2 && nat.Mappings().front().expires == firstDeadline,
+            "same Identifier with restarted sequence gets a new row and leaves the old timer alone");
+    const auto secondRun = value(4);
+    now += 1000;
+    Require(send(Inside, Datagram(Icmp, host, remote, 7, 2, 8)) && value(4) == secondRun,
+            "latest ping run receives the next consecutive request");
+    Require(send(Outside, Datagram(Icmp, remote, wan, firstRun, 1, 0)) &&
+            destination == host && value(4) == 7, "a delayed reply still resolves its earlier mapping");
+    now += EchoRequestGapMs + 1;
+    Require(send(Inside, Datagram(Icmp, host, remote, 7, 3, 8)) && nat.Mappings().size() == 3,
+            "a new burst after a gap gets a new row even if Identifier and sequence continue");
+    const auto thirdRun = value(4);
+    now += ShortIdleMs - 1;
+    nat.Expire(now);
+    Require(nat.Mappings().size() == 1 && nat.Mappings().front().outside == thirdRun,
+            "each ping run expires on its own timer");
 
     for (const auto protocol : {Tcp, Udp}) {
         Require(send(Inside, Datagram(protocol, host, remote, 12345, 8080, 2)) &&

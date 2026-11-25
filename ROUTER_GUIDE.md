@@ -18,7 +18,10 @@ Host A ── Port 1 (Inside) [NAT] Port 2 (Outside) ── Host B
 3. Routing Table에 `192.168.42.0 / 255.255.255.0 / Port 1 / U`, `10.42.0.0 / 255.255.255.0 / Port 2 / U`를 추가한다. `U`에는 Gateway를 입력하지 않는다.
 4. Host A에서 `ping 10.42.0.10`을 실행한다. Host B에서 ICMP Echo 요청을 허용하고, Wireshark의 양쪽 캡처에서 IP/Identifier가 바뀌었다가 응답에서 복원되는지 확인한다. NAT Table에서 ICMP 행이 생기고 마지막 패킷 후 약 60초 뒤 사라지는지도 확인한다.
 
+NAT 테이블에 두 번의 ping을 나란히 표시하려면 첫 `ping`이 끝난 뒤 약 3초 기다렸다가, 첫 항목이 만료되기 전에 다시 실행한다. 한 번의 ping에서 이어지는 Echo Request는 한 외부 ID를 공유한다. 프로그램은 같은 내부 ID가 재사용된 경우에도 Sequence Number가 끊기거나 요청 사이의 간격이 2.5초를 넘으면 새 행을 만들며, 각 행은 마지막 사용으로부터 60초 뒤에 만료된다.
+
 ## TCP·UDP 가산점
+
 
 **TCP 송신 NAPT** — Host B에서 `python -m http.server 8080 --bind 10.42.0.10`을 실행하고 Host A에서 `curl.exe http://10.42.0.10:8080/`을 실행한다. Host B 캡처에서 TCP 출발지 IP가 `10.42.0.2`이고 출발지 포트가 NAT Table의 외부 포트와 같은지 확인한다.
 

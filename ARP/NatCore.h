@@ -1,11 +1,13 @@
 #pragma once
 #include "RouterCore.h"
+#include <iterator>
 
 // Called under the router lock. Times are monotonic milliseconds.
 namespace NatCore {
 constexpr unsigned char Icmp = 1, Tcp = 6, Udp = 17;
 constexpr int Inside = 0, Outside = 1;
 constexpr uint64_t ShortIdleMs = 60000, TcpIdleMs = 600000;
+constexpr uint64_t EchoRequestGapMs = 2500;
 
 struct Rule {
     unsigned char protocol;
@@ -23,6 +25,8 @@ struct Mapping {
     uint16_t remotePort;
     bool forwarded;
     uint64_t expires;
+    uint16_t lastEchoSequence = 0;
+    uint64_t lastEchoRequest = 0;
 };
 
 inline IpAddress Address(const unsigned char* bytes) {
@@ -187,10 +191,21 @@ private:
         const auto source = Address(packet.data() + 12);
         const auto remote = Address(packet.data() + 16);
         if (!Unicast(source) || !Unicast(outsideIp)) return false;
-        auto row = std::find_if(mappings_.begin(), mappings_.end(), [&](const Mapping& item) {
+        const auto latest = std::find_if(mappings_.rbegin(), mappings_.rend(), [&](const Mapping& item) {
             return item.protocol == protocol && item.insideIp == source && item.inside == transport.source &&
-                   (protocol == Icmp || (item.remoteIp == remote && item.remotePort == transport.destination));
+                   item.remoteIp == remote && (protocol == Icmp || item.remotePort == transport.destination);
         });
+        auto row = latest == mappings_.rend() ? mappings_.end() : std::prev(latest.base());
+        uint16_t sequence = 0;
+        if (protocol == Icmp) {
+            sequence = Wire::Read16(packet.data() + transport.header + 6);
+            // ICMP carries no process marker. Reuse only consecutive requests of the latest burst.
+            if (row != mappings_.end() &&
+                (sequence != static_cast<uint16_t>(row->lastEchoSequence + 1) ||
+                 now - row->lastEchoRequest > EchoRequestGapMs)) {
+                row = mappings_.end();
+            }
+        }
         if (row == mappings_.end()) {
             if (mappings_.size() >= MaximumMappings) return false;
             const auto outside = Allocate(protocol);
@@ -198,6 +213,10 @@ private:
             mappings_.push_back({protocol, source, transport.source, outside, remote, transport.destination,
                                  false, Deadline(protocol, now)});
             row = mappings_.end() - 1;
+        }
+        if (protocol == Icmp) {
+            row->lastEchoSequence = sequence;
+            row->lastEchoRequest = now;
         }
         row->expires = Deadline(protocol, now);
         Rewrite(packet, transport, false, outsideIp, row->outside);
@@ -213,7 +232,7 @@ private:
         const auto protocol = packet[9];
         auto row = std::find_if(mappings_.begin(), mappings_.end(), [&](const Mapping& item) {
             return item.protocol == protocol && item.outside == transport.destination &&
-                   (protocol == Icmp || (item.remoteIp == remote && item.remotePort == transport.source));
+                   item.remoteIp == remote && (protocol == Icmp || item.remotePort == transport.source);
         });
         const Rule* rule = nullptr;
         if (row == mappings_.end()) {
